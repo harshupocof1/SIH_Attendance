@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Teacher Dashboard{% endblock %}
+
+{% block content %}
+<div class="container">
+    <section>
+        <h2>Live QR Code</h2>
+        <p>Display this screen for students to scan.</p>
+        <div id="qr-container">
+            <img id="qr-image" src="" alt="QR Code will appear here">
+        </div>
+        <p id="status">Connecting to server...</p>
+    </section>
+
+    <section>
+        <h2>Attendance Monitor</h2>
+        <p>Session ID: <span id="session-id">CLASS-42-{{ '' | date('Y-m-d') }}</span></p>
+        <div class="controls">
+            <button id="manual-mark-btn">Manual Entry</button>
+        </div>
+        <table id="attendance-table">
+            <thead>
+                <tr>
+                    <th>Student</th>
+                    <th>Check-in Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                </tbody>
+        </table>
+    </section>
+</div>
+
+{% include '_manual_attendance_modal.html' %}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const socket = io('/teacher');
+        const qrImage = document.getElementById('qr-image');
+        const statusEl = document.getElementById('status');
+        let qrInterval;
+
+        socket.on('connect', () => {
+            statusEl.textContent = 'Connected. Generating QR code...';
+            startQrGeneration();
+        });
+
+        socket.on('new_qr_code', (data) => {
+            qrImage.src = `data:image/png;base64,${data.image}`;
+            statusEl.textContent = `QR code is live. It will refresh automatically.`;
+        });
+        
+        socket.on('student_checked_in', (data) => {
+            const tableBody = document.querySelector("#attendance-table tbody");
+            const newRow = tableBody.insertRow(0); // Insert at the top
+            newRow.innerHTML = `<td>${data.username}</td><td>${data.timestamp}</td>`;
+            newRow.classList.add('new-entry');
+        });
+
+        function startQrGeneration() {
+            if (qrInterval) clearInterval(qrInterval);
+            socket.emit('request_qr_code'); // Get first code immediately
+            qrInterval = setInterval(() => {
+                socket.emit('request_qr_code');
+            }, {{ config.QR_REFRESH_RATE_SECONDS * 1000 }});
+        }
+
+        socket.on('disconnect', () => {
+            statusEl.textContent = 'Disconnected from server. Attempting to reconnect...';
+            clearInterval(qrInterval);
+        });
+        
+        // Manual Attendance Modal Logic
+        const modal = document.getElementById('manual-modal');
+        const btn = document.getElementById('manual-mark-btn');
+        const span = document.getElementsByClassName('close')[0];
+        
+        btn.onclick = () => { modal.style.display = 'block'; }
+        span.onclick = () => { modal.style.display = 'none'; }
+        window.onclick = (event) => {
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
+        }
+        
+        document.getElementById('manual-form').addEventListener('submit', function(e){
+            e.preventDefault();
+            const studentId = document.getElementById('student-select').value;
+            fetch('/api/manual_mark', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({student_id: studentId})
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.success) {
+                    alert(`${data.username} marked present!`);
+                    modal.style.display = 'none';
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}

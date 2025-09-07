@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Scan QR Code{% endblock %}
+
+{% block content %}
+<h2>Scan Attendance QR Code</h2>
+
+<video id="video" width="300" height="300" autoplay muted playsinline></video>
+<canvas id="canvas" hidden></canvas>
+
+<div id="scan-result"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/jsQR.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const resultContainer = document.getElementById('scan-result');
+    let lastScanTime = 0;
+    const scanCooldown = 5000; // 5 seconds
+
+    // Ask for camera
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+    .then(stream => {
+        video.srcObject = stream;
+        video.setAttribute("playsinline", true); // for iOS
+        video.play();
+        requestAnimationFrame(tick);
+    })
+    .catch(err => {
+        console.error("Camera error:", err);
+        resultContainer.innerHTML = "<p class='error'>Cannot access camera. Please allow permissions.</p>";
+    });
+
+    function tick() {
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+
+            if (code) {
+                let now = Date.now();
+                if (now - lastScanTime >= scanCooldown) {
+                    lastScanTime = now;
+                    resultContainer.innerHTML = `<p class="notice">Scanned! Verifying...</p>`;
+
+                    fetch('/api/mark_attendance', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ token: code.data })
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            resultContainer.innerHTML = `<p class="success">✅ Attendance marked!</p>`;
+                        } else {
+                            resultContainer.innerHTML = `<p class="error">❌ ${data.error}</p>`;
+                        }
+                    })
+                    .catch(err => {
+                        console.error("Fetch error:", err);
+                        resultContainer.innerHTML = `<p class="error">Request failed.</p>`;
+                    });
+                }
+            }
+        }
+        requestAnimationFrame(tick);
+    }
+});
+</script>
+{% endblock %}
