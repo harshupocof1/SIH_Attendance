@@ -149,4 +149,5 @@ def manual_mark():
 if __name__ == '__main__':
     # --- DATABASE FEATURES DISABLED ---
     # The data seeding section that connects to the database has been removed.
-    socketio.run(app, debug=True)
+
+    socketio.run(app, debug=True,allow_unsafe_werkzeug=True)
