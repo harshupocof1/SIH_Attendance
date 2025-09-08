@@ -13,51 +13,107 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import qrcode
 from pymongo.errors import ConnectionFailure, OperationFailure
 
+# --- Configuration ---
+class Config:
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'a-super-secret-key-you-should-change'
+    MONGO_URI = os.environ.get('MONGO_URI') or "mongodb+srv://harshdeep_db_user:5aBM8pWh5nXgqOZ4@sih.zkbv6yk.mongodb.net/?retryWrites=true&w=majority&appName=Sih"
+    QR_REFRESH_RATE_SECONDS = 2
+    TOKEN_VALIDITY_SECONDS = 5
+    USE_MONGO = os.environ.get('USE_MONGO', 'true').lower() == 'true'
+
 # --- In-Memory Database for Fallback ---
-# This class simulates the behavior of MongoDB collections using dictionaries.
 class InMemoryDB:
     def __init__(self):
         self.users = {}
         self.attendance = {}
         self.latest_id = 0
+        self.setup_demo_data()
+    
+    def setup_demo_data(self):
+        # Pre-create demo users
+        hashed_password = generate_password_hash("password", method='pbkdf2:sha256')
+        demo_users = [
+            {"_id": ObjectId("111111111111111111111111"), "username": "teacher", "password": hashed_password, 
+             "role": "teacher", "section": "A", "student_name": "Demo Teacher", "status": "absent"},
+            {"_id": ObjectId("222222222222222222222222"), "username": "student1", "password": hashed_password, 
+             "role": "student", "section": "A", "student_name": "Student One", "status": "absent"},
+            {"_id": ObjectId("333333333333333333333333"), "username": "student2", "password": hashed_password, 
+             "role": "student", "section": "B", "student_name": "Student Two", "status": "absent"},
+            {"_id": ObjectId("444444444444444444444444"), "username": "demo", "password": hashed_password, 
+             "role": "demo", "section": "C", "student_name": "Demo Student", "status": "absent"},
+        ]
+        
+        for user in demo_users:
+            self.users[str(user["_id"])] = user
+            
+        # Pre-create some attendance records
+        today = datetime.utcnow().strftime('%Y-%m-%d')
+        self.attendance[today] = {
+            "_id": ObjectId("555555555555555555555555"),
+            "date": today,
+            "records": [
+                {
+                    "user_id": ObjectId("222222222222222222222222"),
+                    "username": "student1",
+                    "timestamp": datetime.utcnow(),
+                    "checkpoint": "Period 1",
+                    "method": "QR"
+                }
+            ]
+        }
 
     def find_one(self, collection_name, query):
-        collection = getattr(self, collection_name)
+        collection = getattr(self, collection_name, {})
         for doc_id, doc in collection.items():
-            # Simple query matching for demonstration
             match = True
             for key, value in query.items():
+                if key not in doc:
+                    match = False
+                    break
+                    
+                # Handle special _id field comparison
                 if key == '_id':
                     if isinstance(value, ObjectId):
-                        if str(doc_id) != str(value):
+                        if str(doc.get('_id')) != str(value):
                             match = False
                             break
                     else:
-                        if doc_id != value:
+                        if doc.get('_id') != value:
                             match = False
                             break
-                elif key in doc and doc[key] != value:
+                elif doc[key] != value:
                     match = False
                     break
-                elif key not in doc:
-                    match = False
-                    break
+                    
             if match:
                 return doc.copy()
         return None
 
-    def find(self, collection_name, query):
-        collection = getattr(self, collection_name)
+    def find(self, collection_name, query=None):
+        if query is None:
+            query = {}
+        collection = getattr(self, collection_name, {})
         results = []
         for doc_id, doc in collection.items():
             match = True
             for key, value in query.items():
-                if key in doc and doc[key] != value:
+                if key not in doc:
                     match = False
                     break
-                elif key not in doc:
+                    
+                if key == '_id':
+                    if isinstance(value, ObjectId):
+                        if str(doc.get('_id')) != str(value):
+                            match = False
+                            break
+                    else:
+                        if doc.get('_id') != value:
+                            match = False
+                            break
+                elif doc[key] != value:
                     match = False
                     break
+                    
             if match:
                 results.append(doc.copy())
         return results
@@ -65,73 +121,125 @@ class InMemoryDB:
     def insert_one(self, collection_name, document):
         collection = getattr(self, collection_name)
         self.latest_id += 1
-        new_id = self.latest_id
-        document['_id'] = ObjectId(str(new_id).zfill(24)) # Dummy ObjectId
-        collection[new_id] = document
+        
+        # Create a proper ObjectId for consistency
+        if '_id' not in document:
+            document['_id'] = ObjectId()
+                
+        collection[str(document['_id'])] = document.copy()
         return type('result', (object,), {'inserted_id': document['_id']})
+    
+    def insert_many(self, collection_name, documents):
+        results = []
+        for doc in documents:
+            result = self.insert_one(collection_name, doc)
+            results.append(result.inserted_id)
+        return type('result', (object,), {'inserted_ids': results})
 
     def update_one(self, collection_name, query, update, upsert=False):
-        collection = getattr(self, collection_name)
+        collection = getattr(self, collection_name, {})
         for doc_id, doc in collection.items():
             match = True
             for key, value in query.items():
-                if key in doc and doc[key] != value:
+                if key not in doc:
                     match = False
                     break
-                elif key not in doc:
+                    
+                if key == '_id':
+                    if isinstance(value, ObjectId):
+                        if str(doc.get('_id')) != str(value):
+                            match = False
+                            break
+                    else:
+                        if doc.get('_id') != value:
+                            match = False
+                            break
+                elif doc[key] != value:
                     match = False
                     break
+                    
             if match:
-                for op, fields in update.items():
-                    if op == '$push':
-                        for field, new_value in fields.items():
-                            if field not in doc:
-                                doc[field] = []
-                            doc[field].append(new_value)
-                return type('result', (object,), {'modified_count': 1})
+                # Handle $push operator
+                if '$push' in update:
+                    for field, new_value in update['$push'].items():
+                        if field not in doc:
+                            doc[field] = []
+                        doc[field].append(new_value)
+                        collection[doc_id] = doc
+                return type('result', (object,), {'modified_count': 1, 'matched_count': 1})
+                
         if upsert:
-            new_doc = {}
-            for key, value in query.items():
-                new_doc[key] = value
-            for op, fields in update.items():
-                if op == '$push':
-                    for field, new_value in fields.items():
-                        new_doc[field] = [new_value]
-            self.insert_one(collection_name, new_doc)
-            return type('result', (object,), {'upserted_id': new_doc['_id']})
+            new_doc = query.copy()
+            if '$push' in update:
+                for field, new_value in update['$push'].items():
+                    new_doc[field] = [new_value]
+            result = self.insert_one(collection_name, new_doc)
+            return type('result', (object,), {'upserted_id': result.inserted_id, 'matched_count': 0, 'modified_count': 0})
+            
+        return type('result', (object,), {'modified_count': 0, 'matched_count': 0})
 
-    def count_documents(self, collection_name, query={}):
+    def count_documents(self, collection_name, query=None):
+        if query is None:
+            query = {}
         return len(self.find(collection_name, query))
-
-# --- Configuration ---
-class Config:
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'a-super-secret-key-you-should-change'
-    # Fallback to a development URI if environment variable is not set
-    MONGO_URI = os.environ.get('MONGO_URI') or "mongodb://localhost:27017/attendance_app"
-    QR_REFRESH_RATE_SECONDS = 2
-    TOKEN_VALIDITY_SECONDS = 5
 
 # --- App Initialization ---
 app = Flask(__name__)
 app.config.from_object(Config)
 
-# Attempt to connect to MongoDB Atlas
+# Initialize database connection
 mongo_client = None
-in_memory_db = None
-try:
-    mongo_client = PyMongo(app)
-    # Ping the database to check for a successful connection
-    mongo_client.db.command('ping')
-    print("Successfully connected to MongoDB Atlas.")
-except (ConnectionFailure, OperationFailure, AttributeError) as e:
-    # Added AttributeError to handle cases where mongo_client.db is None
-    print(f"MongoDB connection failed: {e}. Using in-memory database.")
-    mongo_client = None  # Ensure mongo_client is explicitly None for the fallback to work
-    in_memory_db = InMemoryDB()
+in_memory_db = InMemoryDB()
+use_mongo = app.config['USE_MONGO']
+
+if use_mongo:
+    try:
+        mongo_client = PyMongo(app)
+        mongo_client.db.command('ping')
+        print("Successfully connected to MongoDB Atlas.")
+        use_mongo = True
+    except (ConnectionFailure, OperationFailure) as e:
+        print(f"MongoDB connection failed: {e}. Using in-memory database.")
+        use_mongo = False
+else:
+    print("Using in-memory database (MongoDB disabled via config).")
+    use_mongo = False
 
 # Function to get the correct database object (MongoDB or in-memory)
 def get_db():
-    return mongo_client.db if mongo_client else in_memory_db
+    return mongo_client.db if use_mongo else in_memory_db
+
+# Helper function to execute database operations correctly
+def db_execute(collection, operation, *args, **kwargs):
+    if use_mongo:
+        # For MongoDB
+        coll = getattr(get_db(), collection)
+        if operation == 'find_one':
+            return coll.find_one(*args, **kwargs)
+        elif operation == 'find':
+            return list(coll.find(*args, **kwargs))
+        elif operation == 'insert_one':
+            return coll.insert_one(*args, **kwargs)
+        elif operation == 'update_one':
+            return coll.update_one(*args, **kwargs)
+        elif operation == 'count_documents':
+            return coll.count_documents(*args, **kwargs)
+        elif operation == 'insert_many':
+            return coll.insert_many(*args, **kwargs)
+    else:
+        # For in-memory database
+        if operation == 'find_one':
+            return get_db().find_one(collection, *args, **kwargs)
+        elif operation == 'find':
+            return get_db().find(collection, *args, **kwargs)
+        elif operation == 'insert_one':
+            return get_db().insert_one(collection, *args, **kwargs)
+        elif operation == 'update_one':
+            return get_db().update_one(collection, *args, **kwargs)
+        elif operation == 'count_documents':
+            return get_db().count_documents(collection, *args, **kwargs)
+        elif operation == 'insert_many':
+            return get_db().insert_many(collection, *args, **kwargs)
 
 socketio = SocketIO(app)
 login_manager = LoginManager(app)
@@ -159,13 +267,7 @@ class User(UserMixin):
 # --- User Loader ---
 @login_manager.user_loader
 def load_user(user_id):
-    db = get_db()
-    # Handle the case where the in-memory database may not have a valid ObjectId
-    if mongo_client:
-        user_data = db.users.find_one({"_id": ObjectId(user_id)})
-    else:
-        user_data = db.users.find_one('users', {'_id': ObjectId(user_id)})
-
+    user_data = db_execute('users', 'find_one', {'_id': ObjectId(user_id)})
     if user_data:
         return User(user_data)
     return None
@@ -195,8 +297,7 @@ def login():
         username = request.form['username']
         password = request.form['password']
         
-        db = get_db()
-        user_data = db.users.find_one({"username": username})
+        user_data = db_execute('users', 'find_one', {"username": username})
         
         if not user_data:
             flash(f"No user found with username '{username}'.")
@@ -225,22 +326,39 @@ def student_stats():
     if current_user.role == 'teacher':
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
 
-    db = get_db()
+    # Calculate attendance percentage based on total possible checkpoints
+    total_checkpoints = len(CHECKPOINTS)
     student_id = ObjectId(current_user.id)
-    total_classes = db.attendance.count_documents('attendance', {})
-    attended_classes = db.attendance.count_documents('attendance', {"records.user_id": student_id})
-    percentage = round((attended_classes / total_classes) * 100, 2) if total_classes > 0 else 0
+    
+    # Count how many checkpoints the student has attended
+    attended_checkpoints = 0
+    all_attendance = db_execute('attendance', 'find', {})
+    
+    for day in all_attendance:
+        for record in day.get('records', []):
+            if str(record.get('user_id')) == str(student_id):
+                attended_checkpoints += 1
+    
+    # Calculate percentage
+    total_possible = total_checkpoints * max(1, len(all_attendance))
+    percentage = round((attended_checkpoints / total_possible) * 100, 2) if total_possible > 0 else 0
 
-    today_date = datetime.utcnow().strftime('%Y-%d-%m')
-    today_doc = db.attendance.find_one('attendance', {"date": today_date})
+    # Get today's date in consistent format
+    today_date = datetime.utcnow().strftime('%Y-%m-%d')
+    today_doc = db_execute('attendance', 'find_one', {"date": today_date})
     classes_today = 0
+    
     if today_doc:
-        classes_today = len({rec['checkpoint'] for rec in today_doc.get("records", [])
-                             if str(rec["user_id"]) == str(student_id)})
+        for rec in today_doc.get("records", []):
+            if str(rec.get("user_id")) == str(student_id):
+                classes_today += 1
 
     return jsonify({
-        'success': True, 'percentage': percentage, 'classes_today': classes_today,
-        'total_classes_today': len(CHECKPOINTS), 'emergency_contacts': 5
+        'success': True, 
+        'percentage': percentage, 
+        'classes_today': classes_today,
+        'total_classes_today': len(CHECKPOINTS), 
+        'emergency_contacts': 5
     })
 
 @app.route('/teacher')
@@ -255,7 +373,7 @@ def teacher_dashboard():
 def teacher_qr():
     if current_user.role != 'teacher':
         return "Access Denied", 403
-    today_date = datetime.utcnow().strftime('%Y-%d-%m')
+    today_date = datetime.utcnow().strftime('%Y-%m-%d')
     qr_refresh_ms = app.config.get('QR_REFRESH_RATE_SECONDS', 10) * 1000
     return render_template('teacher_qr.html', qr_refresh_ms=qr_refresh_ms, today_date=today_date, checkpoints=CHECKPOINTS)
 
@@ -264,9 +382,8 @@ def teacher_qr():
 def teacher_monitor():
     if current_user.role != 'teacher':
         return "Access Denied", 403
-    db = get_db()
-    date_str = request.args.get('date', datetime.utcnow().strftime('%Y-%d-%m'))
-    daily_attendance_doc = db.attendance.find_one('attendance', {"date": date_str})
+    date_str = request.args.get('date', datetime.utcnow().strftime('%Y-%m-%d'))
+    daily_attendance_doc = db_execute('attendance', 'find_one', {"date": date_str})
     return render_template('teacher_monitor.html', daily_doc=daily_attendance_doc, date_str=date_str)
 
 @app.route('/teacher/manual_entry')
@@ -274,9 +391,8 @@ def teacher_monitor():
 def teacher_manual_entry():
     if current_user.role != 'teacher':
         return "Access Denied", 403
-    db = get_db()
-    today_date = datetime.utcnow().strftime('%Y-%d-%m')
-    students = list(db.users.find('users', {"role": "student"}))
+    today_date = datetime.utcnow().strftime('%Y-%m-%d')
+    students = db_execute('users', 'find', {"role": "student"})
     sections = sorted(list({s.get("section", "Unassigned") for s in students}))
     return render_template(
         'teacher_manual_entry.html', students=students, sections=sections,
@@ -286,10 +402,9 @@ def teacher_manual_entry():
 @app.route('/student')
 @login_required
 def student_dashboard():
-    name = current_user.student_name
     if current_user.role == 'teacher':
         return "Access Denied", 403
-    return render_template('student_dashboard.html', name=name)
+    return render_template('student_dashboard.html', name=current_user.student_name)
 
 # --- New Teacher Dashboard Routes ---
 @app.route('/teacher/students')
@@ -298,8 +413,7 @@ def teacher_students():
     """Route to view all students."""
     if current_user.role != 'teacher':
         return "Access Denied", 403
-    db = get_db()
-    students = list(db.users.find('users', {"role": "student"}))
+    students = db_execute('users', 'find', {"role": "student"})
     return render_template('teacher_students.html', students=students)
 
 @app.route('/teacher/assignments')
@@ -348,8 +462,7 @@ def api_add_student():
         if not data.get(field):
             return jsonify({'success': False, 'error': f'Missing field: {field}'}), 400
 
-    db = get_db()
-    if db.users.find_one({"username": data['username']}):
+    if db_execute('users', 'find_one', {"username": data['username']}):
         return jsonify({'success': False, 'error': 'Username already exists'}), 400
 
     new_student = {
@@ -361,10 +474,9 @@ def api_add_student():
         "section": data['section'],
         "status": "absent"
     }
-    result = db.users.insert_one('users', new_student)
+    result = db_execute('users', 'insert_one', new_student)
 
     return jsonify({'success': True, 'message': 'Student added successfully', 'id': str(result.inserted_id)})
-
 
 # --- API and WebSocket Logic ---
 @socketio.on('connect', namespace='/teacher')
@@ -389,95 +501,138 @@ def api_mark_attendance():
         payload = serializer.loads(token, max_age=app.config.get('TOKEN_VALIDITY_SECONDS', 15))
         date, checkpoint = payload['date'], payload['checkpoint']
         
-        db = get_db()
-        existing_record = db.attendance.find_one('attendance', {
-            "date": date, "records": {"$elemMatch": {"user_id": ObjectId(current_user.id), "checkpoint": checkpoint}}
+        existing_record = db_execute('attendance', 'find_one', {
+            "date": date, 
+            "records": {"$elemMatch": {"user_id": ObjectId(current_user.id), "checkpoint": checkpoint}}
         })
-        if existing_record: return jsonify({'success': False, 'error': f'Attendance already marked for {checkpoint}.'}), 409
+        if existing_record: 
+            return jsonify({'success': False, 'error': f'Attendance already marked for {checkpoint}.'}), 409
 
-        new_record = {"user_id": ObjectId(current_user.id), "username": current_user.username, "timestamp": datetime.utcnow(), "checkpoint": checkpoint, "method": "QR"}
-        db.attendance.update_one('attendance', {"date": date}, {"$push": {"records": new_record}}, upsert=True)
-        socketio.emit('student_checked_in', {**new_record, 'timestamp': new_record['timestamp'].strftime('%I:%M:%S %p'), 'date': date}, namespace='/teacher', broadcast=True)
+        new_record = {
+            "user_id": ObjectId(current_user.id), 
+            "username": current_user.username, 
+            "timestamp": datetime.utcnow(), 
+            "checkpoint": checkpoint, 
+            "method": "QR"
+        }
+        
+        db_execute('attendance', 'update_one', 
+                  {"date": date}, 
+                  {"$push": {"records": new_record}}, 
+                  upsert=True)
+                  
+        socketio.emit('student_checked_in', {
+            **new_record, 
+            'timestamp': new_record['timestamp'].strftime('%I:%M:%S %p'), 
+            'date': date
+        }, namespace='/teacher', broadcast=True)
+        
         return jsonify({'success': True, 'message': 'Attendance marked successfully!'})
 
-    except SignatureExpired: return jsonify({'success': False, 'error': 'QR Code has expired.'}), 400
-    except (BadTimeSignature, Exception): return jsonify({'success': False, 'error': 'Invalid QR Code.'}), 400
+    except SignatureExpired: 
+        return jsonify({'success': False, 'error': 'QR Code has expired.'}), 400
+    except (BadTimeSignature, Exception): 
+        return jsonify({'success': False, 'error': 'Invalid QR Code.'}), 400
 
 @app.route('/api/manual_mark', methods=['POST'])
 @login_required
 def manual_mark():
-    if current_user.role != 'teacher': return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if current_user.role != 'teacher': 
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
 
     data = request.get_json()
     student_id, date, checkpoint = data.get('student_id'), data.get('date'), data.get('checkpoint')
-    if not all([student_id, date, checkpoint]): return jsonify({'success': False, 'error': 'Missing data.'}), 400
+    if not all([student_id, date, checkpoint]): 
+        return jsonify({'success': False, 'error': 'Missing data.'}), 400
 
-    db = get_db()
-    student_data = db.users.find_one('users', {"_id": ObjectId(student_id)})
-    if not student_data: return jsonify({'success': False, 'error': 'Student not found'}), 404
+    student_data = db_execute('users', 'find_one', {"_id": ObjectId(student_id)})
+    if not student_data: 
+        return jsonify({'success': False, 'error': 'Student not found'}), 404
 
-    existing_record = db.attendance.find_one('attendance', {
-        "date": date, "records": {"$elemMatch": {"user_id": ObjectId(student_id), "checkpoint": checkpoint}}
+    existing_record = db_execute('attendance', 'find_one', {
+        "date": date, 
+        "records": {"$elemMatch": {"user_id": ObjectId(student_id), "checkpoint": checkpoint}}
     })
-    if existing_record: return jsonify({'success': False, 'error': f'{student_data["username"]} already marked for {checkpoint}.'}), 409
+    if existing_record: 
+        return jsonify({'success': False, 'error': f'{student_data["username"]} already marked for {checkpoint}.'}), 409
 
-    new_record = {"user_id": ObjectId(student_id), "username": student_data["username"], "timestamp": datetime.utcnow(), "checkpoint": checkpoint, "method": "Manual"}
-    db.attendance.update_one('attendance', {"date": date}, {"$push": {"records": new_record}}, upsert=True)
-    socketio.emit('student_checked_in', {**new_record, 'timestamp': new_record['timestamp'].strftime('%I:%M:%S %p'), 'date': date}, namespace='/teacher', broadcast=True)
+    new_record = {
+        "user_id": ObjectId(student_id), 
+        "username": student_data["username"], 
+        "timestamp": datetime.utcnow(), 
+        "checkpoint": checkpoint, 
+        "method": "Manual"
+    }
+    
+    db_execute('attendance', 'update_one', 
+              {"date": date}, 
+              {"$push": {"records": new_record}}, 
+              upsert=True)
+              
+    socketio.emit('student_checked_in', {
+        **new_record, 
+        'timestamp': new_record['timestamp'].strftime('%I:%M:%S %p'), 
+        'date': date
+    }, namespace='/teacher', broadcast=True)
+    
     return jsonify({'success': True, 'username': student_data["username"]})
 
 @app.route('/api/manual_bulk_mark', methods=['POST'])
 @login_required
 def manual_bulk_mark():
-    if current_user.role != 'teacher': return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if current_user.role != 'teacher': 
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
 
     data = request.get_json()
     student_ids, date, checkpoint = data.get('student_ids', []), data.get('date'), data.get('checkpoint')
-    if not student_ids or not date or not checkpoint: return jsonify({'success': False, 'error': 'Missing data'}), 400
+    if not student_ids or not date or not checkpoint: 
+        return jsonify({'success': False, 'error': 'Missing data'}), 400
     
-    db = get_db()
     updated, skipped = [], []
     for sid in student_ids:
-        student_data = db.users.find_one('users', {"_id": ObjectId(sid)})
+        student_data = db_execute('users', 'find_one', {"_id": ObjectId(sid)})
         if not student_data:
             skipped.append(f"ID:{sid}"); continue
 
-        existing_record = db.attendance.find_one('attendance', {
-            "date": date, "records": {"$elemMatch": {"user_id": ObjectId(sid), "checkpoint": checkpoint}}
+        existing_record = db_execute('attendance', 'find_one', {
+            "date": date, 
+            "records": {"$elemMatch": {"user_id": ObjectId(sid), "checkpoint": checkpoint}}
         })
         if existing_record:
             skipped.append(student_data["username"]); continue
 
-        new_record = {"user_id": ObjectId(sid), "username": student_data["username"], "timestamp": datetime.utcnow(), "checkpoint": checkpoint, "method": "Manual"}
-        db.attendance.update_one('attendance', {"date": date}, {"$push": {"records": new_record}}, upsert=True)
+        new_record = {
+            "user_id": ObjectId(sid), 
+            "username": student_data["username"], 
+            "timestamp": datetime.utcnow(), 
+            "checkpoint": checkpoint, 
+            "method": "Manual"
+        }
+        
+        db_execute('attendance', 'update_one', 
+                  {"date": date}, 
+                  {"$push": {"records": new_record}}, 
+                  upsert=True)
+                  
         updated.append(student_data["username"])
-        socketio.emit('student_checked_in', {**new_record, 'timestamp': new_record['timestamp'].strftime('%I:%M:%S %p'), 'date': date}, namespace='/teacher', broadcast=True)
+        socketio.emit('student_checked_in', {
+            **new_record, 
+            'timestamp': new_record['timestamp'].strftime('%I:%M:%S %p'), 
+            'date': date
+        }, namespace='/teacher', broadcast=True)
 
     return jsonify({'success': True, 'updated': updated, 'skipped': skipped})
 
-# --- Main Execution & Data Seeding ---
-if __name__ == '__main__':
-    with app.app_context():
-        db = get_db()
-        if db.users.count_documents('users') == 0:
-            print("Seeding database with demo users...")
-            hashed_password = generate_password_hash("password", method='pbkdf2:sha256')
-            demo_users = [
-                {"username": "teacher", "password": hashed_password, "role": "teacher", "section": "A", "status": "absent"},
-                {"username": "student1", "password": hashed_password, "role": "student", "section": "A", "status": "absent"},
-                {"username": "student2", "password": hashed_password, "role": "student", "section": "B", "status": "absent"},
-                {"username": "demo", "password": hashed_password, "role": "demo", "section": "C", "status": "absent"},
-            ]
-            
-            # Using insert_many for efficiency
-            # The in-memory db also supports this method
-            if mongo_client:
-                 db.users.insert_many(demo_users)
-            else:
-                 for user in demo_users:
-                     db.users.insert_one('users', user)
-                 
-            print("Demo users created.")
+# --- Health Check Endpoint for Render ---
+@app.route('/health')
+def health_check():
+    return jsonify({
+        'status': 'healthy',
+        'database': 'mongodb' if use_mongo else 'in-memory',
+        'timestamp': datetime.utcnow().isoformat()
+    })
 
+# --- Main Execution ---
+if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host="0.0.0.0", port=port, debug=os.environ.get("FLASK_DEBUG", "false").lower() == "true")
