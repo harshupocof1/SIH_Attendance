@@ -32,6 +32,7 @@ FAKE_USERS = {
 
 # Setup for generating and verifying secure, timed tokens
 # --- Constants ---
+# --- Constants ---
 CHECKPOINTS = ["Morning", "Lunch", "Afternoon", "Evening"]
 
 # --- Custom User Class for Flask-Login ---
@@ -291,7 +292,6 @@ def manual_bulk_mark():
         socketio.emit('student_checked_in', {**new_record, 'timestamp': new_record['timestamp'].strftime('%I:%M:%S %p'), 'date': date}, namespace='/teacher', broadcast=True)
 
     return jsonify({'success': True, 'updated': updated, 'skipped': skipped})
-
 # --- Main Execution & Data Seeding ---
 if __name__ == '__main__':
     # --- DATABASE FEATURES DISABLED ---
@@ -299,4 +299,5 @@ if __name__ == '__main__':
 
 
     socketio.run(app, host="0.0.0.0", port=port, debug=False,allow_unsafe_werkzeug=True)
+
 
