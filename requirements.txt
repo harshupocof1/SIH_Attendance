@@ -1,5 +1,5 @@
 
-pymongo[srv]==4.3.3 # The [srv] is important for connecting to Atlas
+pymongo[srv] # The [srv] is important for connecting to Atlas
 eventlet==0.33.3
 Pillow>=10.0.0
 
@@ -13,4 +13,5 @@ qrcode
 gunicorn
 eventlet
 python-dotenv
+
 
