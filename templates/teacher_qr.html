@@ -2,6 +2,9 @@
 {% block title %}QR Code Session{% endblock %}
 
 {% block content %}
+<head>
+    <link rel="stylesheet" href="static/tm.css">
+</head>
 <div class="container text-center" data-refresh-rate="{{ qr_refresh_ms }}">
     <a href="{{ url_for('teacher_dashboard') }}">&larr; Back to Dashboard</a>
     <h2>QR Code Session</h2>

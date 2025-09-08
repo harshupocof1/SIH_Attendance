@@ -1,14 +1,218 @@
-{% extends "base.html" %}
-{% block title %}Teacher Dashboard{% endblock %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teacher Dashboard - Smart Classroom</title>
+  <link rel="stylesheet" href="static/teacher_dashboard.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-content">
+        <div class="logo-section">
+          <div class="logo-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" 
+                 viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 14l9-5-9-5-9 5 9 5z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01-.338 6.708A11.953 11.953 0 0112 20.944a11.953 11.953 0 01-5.822-3.658 12.083 12.083 0 01-.338-6.708L12 14z" />
+            </svg>
+          </div>
+          <div class="logo-text">
+            <div class="logo-title">Teacher Dashboard</div>
+            <div class="logo-subtitle">Smart Classroom</div>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button class="theme-toggle" id="themeToggle" aria-label="Toggle Theme">
+            <span id="themeIcon">🌙</span>
+          </button>
+          <div class="user-profile">
+            <div class="user-avatar">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" 
+                   viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" 
+                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </div>
+            <div class="user-info">
+              <div style="font-size: 0.875rem; font-weight: 600;">Teacher</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
 
-{% block content %}
-<div class="container text-center">
-    <h1>Teacher Dashboard</h1>
-    <p>Welcome, {{ current_user.username }}. Please select an action.</p>
-    <div class="dashboard-nav">
-        <a href="{{ url_for('teacher_qr') }}" class="btn btn-primary">Start QR Session</a>
-        <a href="{{ url_for('teacher_monitor') }}" class="btn btn-secondary">Monitor Attendance</a>
-        <a href="{{ url_for('teacher_manual_entry') }}" class="btn btn-info">Manual Entry</a>
+    <!-- Navigation -->
+    <nav class="navigation">
+      <div class="nav-content">
+        <div class="nav-item active" data-section="dashboard">Dashboard</div>
+        <div class="nav-item" data-section="students">Students</div>
+        <div class="nav-item" data-section="attendance">Attendance</div>
+        <div class="nav-item" data-section="assignments">Assignments</div>
+        <div class="nav-item" data-section="grades">Grades</div>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Dashboard -->
+      <section id="dashboard" class="section active">
+        <div class="dashboard-grid">
+          <div class="stat-card">
+            <div class="stat-header">
+              <div>
+                <div class="stat-value">120</div>
+                <div class="stat-label">Total Students</div>
+              </div>
+              <div class="stat-icon success">🎓</div>
+            </div>
+            <div class="stat-change positive">↑ 5 new this month</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-header">
+              <div>
+                <div class="stat-value">4</div>
+                <div class="stat-label">Classes Today</div>
+              </div>
+              <div class="stat-icon primary">📚</div>
+            </div>
+            <div class="stat-change neutral">— On schedule</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-header">
+              <div>
+                <div class="stat-value">12</div>
+                <div class="stat-label">Pending Assignments</div>
+              </div>
+              <div class="stat-icon warning">📝</div>
+            </div>
+            <div class="stat-change negative">⚠ Needs grading</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-header">
+              <div>
+                <div class="stat-value">5</div>
+                <div class="stat-label">Messages</div>
+              </div>
+              <div class="stat-icon info">💬</div>
+            </div>
+            <div class="stat-change positive">✓ No urgent alerts</div>
+          </div>
+        </div>
+
+        <div class="feature-grid">
+          <button class="feature-card" data-section-target="students">
+            <div class="feature-icon-wrapper">👩‍🎓</div>
+            <div class="feature-title">Students</div>
+            <div class="feature-description">View student list & details</div>
+          </button>
+
+          <button class="feature-card" data-section-target="attendance">
+            <div class="feature-icon-wrapper">📊</div>
+            <div class="feature-title">Attendance</div>
+            <div class="feature-description">Track and manage attendance</div>
+          </button>
+
+          <button class="feature-card" data-section-target="assignments">
+            <div class="feature-icon-wrapper">📝</div>
+            <div class="feature-title">Assignments</div>
+            <div class="feature-description">View and grade assignments</div>
+          </button>
+
+          <button class="feature-card" data-section-target="grades">
+            <div class="feature-icon-wrapper">⭐</div>
+            <div class="feature-title">Grades</div>
+            <div class="feature-description">Manage student grades</div>
+          </button>
+        </div>
+      </section>
+
+      <!-- Students -->
+      <section id="students" class="section">
+        <div class="card">
+          <div class="card-header"><h2 class="card-title">Recent Students</h2></div>
+          <div class="card-body">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Class</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>Amit Sharma</td><td>10-A</td><td>Present</td></tr>
+                <tr><td>Priya Verma</td><td>10-B</td><td>Absent</td></tr>
+                <tr><td>Rohit Kumar</td><td>9-C</td><td>Present</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+<!-- Attendance Section with Buttons Only -->
+<section id="attendance" class="section">
+  <div class="card">
+    <div class="card-body" style="text-align: center; padding: 60px;">
+      <button class="btn btn-primary"
+              style="margin: 10px; padding: 16px 32px; font-size: 18px;"
+              onclick="window.location.href='{{ url_for('teacher_qr') }}'">
+        Generate QR
+      </button>
+      
+      <button class="btn btn-secondary"
+              style="margin: 10px; padding: 16px 32px; font-size: 18px;"
+              onclick="window.location.href='{{ url_for('teacher_manual_entry') }}'">
+        Manual Attendance
+      </button>
     </div>
-</div>
-{% endblock %}
+  </div>
+</section>
+
+
+      <!-- Assignments -->
+      <section id="assignments" class="section">
+        <div class="card">
+          <div class="card-header"><h2 class="card-title">Assignments Overview</h2></div>
+          <div class="card-body">
+            <table>
+              <thead>
+                <tr><th>Title</th><th>Due Date</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Math Homework 1</td><td>2025-09-10</td><td>Pending</td></tr>
+                <tr><td>Science Project</td><td>2025-09-12</td><td>Submitted</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Grades -->
+      <section id="grades" class="section">
+        <div class="card">
+          <div class="card-header"><h2 class="card-title">Grades Overview</h2></div>
+          <div class="card-body">
+            <table>
+              <thead>
+                <tr><th>Student</th><th>Subject</th><th>Grade</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Amit Sharma</td><td>Math</td><td>A</td></tr>
+                <tr><td>Priya Verma</td><td>Science</td><td>B+</td></tr>
+                <tr><td>Rohit Kumar</td><td>English</td><td>A-</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="static/teacher_dashboard.js"></script>
+</body>
+</html>

@@ -1,22 +1,217 @@
 {% extends "base.html" %}
 {% block title %}Login{% endblock %}
+
+{% block head_extra %}
+<style>
+    /* --- Root Variables from your provided CSS --- */
+    :root {
+        --primary: #2563eb;
+        --primary-dark: #1e40af;
+        --danger: #dc2626;
+        --dark: #0f172a;
+        --gray-900: #111827;
+        --gray-700: #374151;
+        --gray-500: #6b7280;
+        --gray-200: #e5e7eb;
+        --gray-100: #f3f4f6;
+        --gray-50: #f9fafb;
+        --white: #ffffff;
+        --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+        --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    }
+
+    /* --- This block ensures body styles are scoped if base.html has its own --- */
+    .login-body-wrapper {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background-color: var(--gray-50);
+        color: var(--gray-900);
+        margin: 0;
+        padding: 0;
+    }
+
+    .login-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 2rem;
+        background: linear-gradient(135deg, var(--primary), #7c3aed);
+    }
+
+    /* --- Login Card Styling --- */
+    .login-card {
+        width: 100%;
+        max-width: 400px;
+        background: var(--white);
+        border-radius: 16px;
+        box-shadow: var(--shadow-lg);
+        overflow: hidden;
+        animation: fadeIn 0.5s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: scale(0.95);
+        }
+        to {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+
+    .login-header {
+        background-color: var(--gray-50);
+        padding: 2rem;
+        text-align: center;
+        border-bottom: 1px solid var(--gray-200);
+    }
+
+    .login-header h2 {
+        margin: 0 0 0.5rem 0;
+        font-size: 1.75rem;
+        color: var(--dark);
+    }
+
+    .login-header p {
+        margin: 0;
+        color: var(--gray-500);
+    }
+
+    .login-form-body {
+        padding: 2rem;
+    }
+
+    /* --- Form Elements --- */
+    .form-group {
+        margin-bottom: 1.25rem;
+    }
+
+    .form-group label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: var(--gray-700);
+    }
+
+    .form-group input {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        border: 1px solid var(--gray-200);
+        border-radius: 8px;
+        font-size: 1rem;
+        box-sizing: border-box; /* Ensures padding doesn't affect width */
+        transition: all 0.2s ease;
+    }
+
+    .form-group input:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+    }
+
+    .btn {
+        display: inline-flex;
+        width: 100%;
+        align-items: center;
+        justify-content: center;
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 1rem;
+        border: none;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .btn-primary {
+        background: var(--primary);
+        color: var(--white);
+    }
+
+    .btn-primary:hover {
+        background: var(--primary-dark);
+        box-shadow: var(--shadow);
+        transform: translateY(-2px);
+    }
+
+    /* --- Flash Message Styling --- */
+    .flash-message {
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1.25rem;
+        text-align: center;
+        font-weight: 500;
+    }
+
+    .flash-message.error {
+        background-color: rgba(220, 38, 38, 0.1);
+        color: var(--danger);
+        border: 1px solid rgba(220, 38, 38, 0.2);
+    }
+
+    /* --- Demo Accounts Footer --- */
+    .login-footer {
+        background-color: var(--gray-100);
+        padding: 1.5rem 2rem;
+        font-size: 0.875rem;
+        color: var(--gray-500);
+        border-top: 1px solid var(--gray-200);
+    }
+
+    .login-footer ul {
+        list-style: none;
+        padding: 0;
+        margin: 0.5rem 0 0 0;
+    }
+
+    .login-footer li {
+        margin-bottom: 0.25rem;
+    }
+
+    .login-footer b {
+        color: var(--gray-700);
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-    <h2>Login</h2>
-    {% with messages = get_flashed_messages() %}
-        {% if messages %}
-            <p class="notice">{{ messages[0] }}</p>
-        {% endif %}
-    {% endwith %}
-    <form method="POST">
-        <label for="username">Username</label>
-        <input type="text" name="username" required>
-        <label for="password">Password</label>
-        <input type="password" name="password" required>
-        <button type="submit">Login</button>
-    </form>
-    <p><b>Demo Accounts:</b></p>
-    <ul>
-        <li>Teacher: `teacher` / `password`</li>
-        <li>Student: `student1` / `password`</li>
-    </ul>
+<div class="login-body-wrapper">
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <h2>Welcome Back!</h2>
+                <p>Please enter your credentials to log in.</p>
+            </div>
+            <div class="login-form-body">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="flash-message error">{{ message }}</div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                <form method="POST" action="{{ url_for('login') }}">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" name="username" placeholder="e.g., teacher" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" name="password" placeholder="e.g., password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Login</button>
+                </form>
+            </div>
+            <div class="login-footer">
+                <p><b>Demo Accounts:</b></p>
+                <ul>
+                    <li>Teacher: `teacher` / `password`</li>
+                    <li>Student: `student1` / `password`</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
