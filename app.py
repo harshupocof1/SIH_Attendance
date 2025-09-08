@@ -1,22 +1,12 @@
-#!/usr/bin/env python3
-# app.py - fixed, minimal changes, includes in-memory Mongo mock when real Mongo isn't available
-
-import os
 import time
 import base64
 import io
-import uuid
 from datetime import datetime
-from functools import wraps
-
-# Optional imports (use real DB if available)
-mongo = PyMongo(app)  # requires MONGO_URI in config
-ObjectId = RealObjectId
-
-
+from bson.objectid import ObjectId
 from flask import Flask, render_template, jsonify, request, redirect, url_for, flash
 from flask_socketio import SocketIO, emit
 from flask_login import LoginManager, login_user, logout_user, current_user, login_required, UserMixin
+from flask_pymongo import PyMongo
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature
 from werkzeug.security import generate_password_hash, check_password_hash
 from config import Config
@@ -25,172 +15,14 @@ import qrcode
 # --- App Initialization ---
 app = Flask(__name__)
 app.config.from_object(Config)
-
-# SocketIO: keep default async_mode (will work in dev). For production with Gunicorn, see note below.
+mongo = PyMongo(app)
 socketio = SocketIO(app)
-
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-# Serializer for tokens
-serializer = URLSafeTimedSerializer(app.config.get('SECRET_KEY', 'dev-secret-key'))
+# Setup for generating and verifying secure, timed tokens
+serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
 
-# --- Constants ---
-CHECKPOINTS = ["Morning", "Lunch", "Afternoon", "Evening"]
-
-# -------------------------
-# In-memory mock for Mongo
-# -------------------------
-class MockCollection:
-    def __init__(self):
-        self._docs = []  # list of dicts
-
-    def find_one(self, query):
-        # Very small query handler supporting {"_id": id} or {"date": date}
-        for d in self._docs:
-            match = True
-            for key, val in query.items():
-                # support nested query like {"records": {"$elemMatch": {...}}} handled elsewhere
-                if key == "records":
-                    match = False
-                    break
-                if key not in d:
-                    match = False
-                    break
-                # compare by string representation so both real ObjectId and mock ids match
-                if str(d[key]) != str(val):
-                    match = False
-                    break
-            if match:
-                return d
-        return None
-
-    def find(self, query=None):
-        # Very naive: return all or those matching top-level simple query
-        if not query:
-            return list(self._docs)
-        results = []
-        for d in self._docs:
-            ok = True
-            for k, v in query.items():
-                if k not in d or str(d[k]) != str(v):
-                    ok = False
-                    break
-            if ok:
-                results.append(d)
-        return results
-
-    def insert_many(self, docs):
-        for d in docs:
-            if "_id" not in d:
-                d["_id"] = MockObjectId()
-            self._docs.append(d)
-        return True
-
-    def update_one(self, filter_q, update_q, upsert=False):
-        # support filter {"date": date} and update like {"$push": {"records": new_record}}
-        doc = self.find_one(filter_q)
-        if doc:
-            # handle $push
-            if "$push" in update_q:
-                for k, v in update_q["$push"].items():
-                    if k not in doc:
-                        doc[k] = []
-                    doc[k].append(v)
-            return {"matched_count": 1, "modified_count": 1}
-        elif upsert:
-            # create doc from filter and apply $push
-            new_doc = {}
-            for k, v in filter_q.items():
-                new_doc[k] = v
-            if "$push" in update_q:
-                for k, val in update_q["$push"].items():
-                    new_doc[k] = [val]
-            if "_id" not in new_doc:
-                new_doc["_id"] = MockObjectId()
-            self._docs.append(new_doc)
-            return {"matched_count": 0, "modified_count": 0, "upserted": True}
-        return {"matched_count": 0, "modified_count": 0}
-
-    def count_documents(self, query):
-        if not query:
-            return len(self._docs)
-        # support counting attendance by checking records.user_id
-        count = 0
-        for d in self._docs:
-            # if query is {"records.user_id": some_id}
-            if "records.user_id" in query:
-                uid = query["records.user_id"]
-                for rec in d.get("records", []):
-                    if str(rec.get("user_id")) == str(uid):
-                        count += 1
-                        break
-            else:
-                # simple top-level match
-                ok = True
-                for k, v in query.items():
-                    if k not in d or str(d[k]) != str(v):
-                        ok = False
-                        break
-                if ok:
-                    count += 1
-        return count
-
-class MockDB:
-    def __init__(self):
-        self.users = MockCollection()
-        self.attendance = MockCollection()
-
-class MockObjectId:
-    def __init__(self, val=None):
-        if val is None:
-            self._id = str(uuid.uuid4())
-        else:
-            # allow constructing from string id
-            self._id = str(val)
-
-    def __str__(self):
-        return self._id
-
-    def __repr__(self):
-        return f"MockObjectId('{self._id}')"
-
-    # equality compares by id string
-    def __eq__(self, other):
-        if isinstance(other, MockObjectId):
-            return self._id == other._id
-        return str(other) == self._id
-
-# Choose real or mock
-if REAL_MONGO_AVAILABLE and PyMongo is not None:
-    mongo = PyMongo(app)  # expects MONGO_URI in Config
-    ObjectId = RealObjectId
-    print("Using real PyMongo.")
-else:
-    mongo = type("X", (), {"db": MockDB()})()
-    ObjectId = lambda x=None: MockObjectId(x)
-    print("PyMongo not available - using in-memory mock DB (demo mode).")
-
-# -------------------------
-# Helper / small utilities
-# -------------------------
-def ensure_demo_users():
-    """Seed demo users when using mock DB and no users exist."""
-    if REAL_MONGO_AVAILABLE:
-        return
-    # check count
-    if mongo.db.users.count_documents({}) == 0:
-        print("Seeding demo users into in-memory mock DB...")
-        hashed_password = generate_password_hash("password", method='pbkdf2:sha256')
-        demo_users = [
-            {"_id": MockObjectId(), "username": "teacher", "password": hashed_password, "role": "teacher", "section": "A"},
-            {"_id": MockObjectId(), "username": "student1", "password": hashed_password, "role": "student", "section": "A"},
-            {"_id": MockObjectId(), "username": "student2", "password": hashed_password, "role": "student", "section": "B"},
-        ]
-        mongo.db.users.insert_many(demo_users)
-        print("Demo users created.")
-
-# --- Custom User Class for Flask-Login ---
 # --- Constants ---
 CHECKPOINTS = ["Period 1", "Period 2", "Period 3", "Period 4"]
 
@@ -504,20 +336,23 @@ def manual_bulk_mark():
     return jsonify({'success': True, 'updated': updated, 'skipped': skipped})
 
 # --- Main Execution & Data Seeding ---
+# --- Main Execution & Data Seeding ---
 if __name__ == '__main__':
-    # If using mock DB, seed demo users
-    ensure_demo_users()
+    with app.app_context():
+        if mongo.db.users.count_documents({}) == 0:
+            print("Seeding database with demo users...")
+            hashed_password = generate_password_hash("password", method='pbkdf2:sha256')
+            demo_users = [
+                {"username": "teacher", "password": hashed_password, "role": "teacher", "section": "A", "status": "absent"},
+                {"username": "student1", "password": hashed_password, "role": "student", "section": "A", "status": "absent"},
+                {"username": "student2", "password": hashed_password, "role": "student", "section": "B", "status": "absent"},
+            ]
+            mongo.db.users.insert_many(demo_users)
+            print("Demo users created.")
 
-    # Expose port
-    try:
-        port = int(os.environ.get("PORT", 5000))
-    except Exception:
-        port = 5000
+    # ✅ Use Render's PORT or fallback to 5000
+    port = int(os.environ.get("PORT", 5000))
+    socketio.run(app, host="0.0.0.0", port=port, debug=os.environ.get("FLASK_DEBUG", "false").lower() == "true")
 
-    # For local dev use socketio.run
-    socketio.run(app, host="0.0.0.0", port=port, debug=False, allow_unsafe_werkzeug=True)
-
-# If running under Gunicorn, leave `app` and `socketio` available for the server to use.
-
-
-
+    
+    socketio.run(app, debug=True, host='127.0.0.1')
