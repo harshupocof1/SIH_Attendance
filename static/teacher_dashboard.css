@@ -124,7 +124,7 @@ body.dark-mode ::-webkit-scrollbar-thumb:hover {
     max-width: 100%;
     width: 100%;
     background: var(--white);
-    min-height: 100vh;
+    min-height: 10vh;
     position: relative;
     overflow-x: hidden;
 }
@@ -487,6 +487,8 @@ body.dark-mode ::-webkit-scrollbar-thumb:hover {
 .btn-secondary:hover {
     background: var(--gray-300);
 }
+
+
 
 table {
     width: 100%;

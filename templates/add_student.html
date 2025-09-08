@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Add Student - Teacher Dashboard</title>
+  <style>
+    :root {
+      --primary: #6366f1;
+      --primary-dark: #4338ca;
+      --danger: #ef4444;
+      --success: #22c55e;
+      --background: linear-gradient(135deg, #dbeafe, #f0fdf4);
+      --card-bg: rgba(255, 255, 255, 0.9);
+      --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.15);
+    }
+
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: var(--background);
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 600px;
+      padding: 20px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 2rem;
+      box-shadow: var(--shadow-lg);
+      backdrop-filter: blur(12px);
+      animation: fadeIn 0.8s ease;
+    }
+
+    .card-header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .card-title {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--primary-dark);
+      letter-spacing: 0.5px;
+    }
+
+    .form-group {
+      margin-bottom: 1.2rem;
+    }
+
+    .form-group label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: #374151;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 0.8rem 1rem;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      font-size: 1rem;
+      background: #f9fafb;
+      transition: all 0.3s ease;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2);
+      background: #fff;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      padding: 0.9rem 1.5rem;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 1rem;
+      border: none;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-dark);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .back-link {
+      display: block;
+      text-align: center;
+      margin-top: 1.5rem;
+      color: var(--primary-dark);
+      text-decoration: none;
+      font-weight: 600;
+      transition: color 0.3s ease;
+    }
+
+    .back-link:hover {
+      color: var(--primary);
+      text-decoration: underline;
+    }
+
+    .message-box {
+      padding: 1rem;
+      border-radius: 10px;
+      margin-bottom: 1.2rem;
+      text-align: center;
+      font-weight: 500;
+      display: none;
+      animation: fadeIn 0.5s ease;
+    }
+
+    .message-box.success {
+      background-color: #dcfce7;
+      color: var(--success);
+      border: 1px solid var(--success);
+    }
+
+    .message-box.error {
+      background-color: #fee2e2;
+      color: var(--danger);
+      border: 1px solid var(--danger);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">✨ Add New Student</h2>
+      </div>
+      <div id="messageBox" class="message-box"></div>
+      <form id="addStudentForm">
+        <div class="form-group">
+          <label for="studentName">Student Name</label>
+          <input type="text" id="studentName" name="studentName" required>
+        </div>
+        <div class="form-group">
+          <label for="rollNumber">Roll Number</label>
+          <input type="text" id="rollNumber" name="rollNumber" required>
+        </div>
+        <div class="form-group">
+          <label for="section">Section</label>
+          <input type="text" id="section" name="section" placeholder="e.g. A, B, C" required>
+        </div>
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" required>
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required>
+        </div>
+        <button type="submit" class="btn btn-primary">➕ Add Student</button>
+      </form>
+      <a href="{{ url_for('teacher_dashboard') }}" class="back-link">← Back to Dashboard</a>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const form = document.getElementById('addStudentForm');
+      const messageBox = document.getElementById('messageBox');
+
+      const showMessage = (message, type) => {
+        messageBox.textContent = message;
+        messageBox.className = `message-box ${type}`;
+        messageBox.style.display = 'block';
+        setTimeout(() => {
+          messageBox.style.display = 'none';
+        }, 3000);
+      };
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(form);
+        const data = {
+          studentName: formData.get('studentName'),
+          rollNumber: formData.get('rollNumber'),
+          section: formData.get('section'),
+          username: formData.get('username'),
+          password: formData.get('password')
+        };
+        showMessage("Adding student...", "info");
+        try {
+          const response = await fetch('/api/add_student', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          });
+          const result = await response.json();
+          if (result.success) {
+            showMessage("🎉 Student added successfully!", "success");
+            form.reset();
+          } else {
+            showMessage(`Error: ${result.error}`, "error");
+          }
+        } catch (error) {
+          console.error("Error adding student:", error);
+          showMessage("An error occurred. Please try again.", "error");
+        }
+      });
+    });
+  </script>
+</body>
+</html>

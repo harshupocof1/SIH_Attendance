@@ -1,0 +1,131 @@
+/* qr_scanner.css */
+
+/* General Body and Container Styles */
+body {
+    background: linear-gradient(135deg, #f0f4f8, #d9e2f3);
+    font-family: 'Arial', sans-serif;
+    color: #333;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    box-sizing: border-box;
+}
+
+/* Header */
+.header-container {
+    width: 100%;
+    background-color: #be288c;
+    color: white;
+    padding: 20px 40px;
+    font-family: 'Poppins', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 600;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+
+/* Navbar */
+.header-container .navbar {
+    display: flex;
+    gap: 15px;
+}
+
+.header-container .navbar button {
+    background-color: white;
+    color: #bf2d78;
+    border: 2px solid #bf2d78;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.header-container .navbar button:hover {
+    background-color: #bf2d78;
+    color: white;
+    transform: scale(1.05);
+    box-shadow: 0 6px 15px rgba(0,0,0,0.2);
+}
+
+/* Main Content Container */
+.qr-container {
+    max-width: 600px;
+    width: 100%;
+    margin: 40px auto;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 30px 40px;
+    border-radius: 16px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    animation: fadeIn 1s ease;
+    text-align: center;
+}
+
+/* Headings */
+h2 {
+    font-family: 'Poppins', sans-serif;
+    color: #bf2d78;
+    font-size: 2rem;
+    margin-bottom: 25px;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+    animation: fadeInDown 1s ease;
+}
+
+/* Video Element for QR Scanner */
+#video {
+    width: 100%;
+    max-width: 500px;
+    height: auto;
+    border: 4px solid #bf2d78;
+    border-radius: 16px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+    animation: fadeIn 1s ease;
+    display: block;
+    margin: 0 auto 20px auto;
+}
+
+/* Scan Result Display */
+#scan-result {
+    font-size: 1.3rem;
+    min-height: 1.5em;
+    animation: fadeIn 0.5s ease;
+    padding: 10px;
+    border-radius: 8px;
+    margin-top: 20px;
+}
+
+.success { 
+    color: #fff; 
+    font-weight: 600; 
+    background-color: #2e7d32;
+}
+.error { 
+    color: #fff; 
+    font-weight: 600; 
+    background-color: #c62828;
+}
+.notice { 
+    color: #fff; 
+    font-style: italic; 
+    font-weight: 500; 
+    background-color: #1565c0;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes fadeInDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+}

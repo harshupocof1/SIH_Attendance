@@ -39,6 +39,7 @@
             <div class="user-info">
               <div style="font-size: 0.875rem; font-weight: 600;">Teacher</div>
             </div>
+             <a href="{{ url_for('logout') }}" class="btn btn-secondary" style="color:white ; background-color:purple;">Logout</a>
           </div>
         </div>
       </div>
@@ -51,7 +52,9 @@
         <div class="nav-item" data-section="students">Students</div>
         <div class="nav-item" data-section="attendance">Attendance</div>
         <div class="nav-item" data-section="assignments">Assignments</div>
-        <div class="nav-item" data-section="grades">Grades</div>
+        <a href="{{ url_for('teacher_add_student') }}" class="nav-item">Add Student</a>
+    
+</div>
       </div>
     </nav>
 
