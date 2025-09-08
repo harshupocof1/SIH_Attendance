@@ -20,18 +20,9 @@ socketio = SocketIO(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-# --- FAKE IN-MEMORY DATABASE FOR DEMO ---
-# This dictionary replaces the MongoDB users collection for login purposes.
-hashed_password = generate_password_hash("password", method='pbkdf2:sha256')
-FAKE_USERS = {
-    '1': {'_id': '1', 'username': 'teacher', 'password': hashed_password, 'is_teacher': True},
-    '2': {'_id': '2', 'username': 'student1', 'password': hashed_password, 'is_teacher': False},
-    '3': {'_id': '3', 'username': 'student2', 'password': hashed_password, 'is_teacher': False},
-}
-# --- END FAKE DATABASE ---
-
 # Setup for generating and verifying secure, timed tokens
-# --- Constants ---
+serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
+
 # --- Constants ---
 CHECKPOINTS = ["Morning", "Lunch", "Afternoon", "Evening"]
 
@@ -296,8 +287,20 @@ def manual_bulk_mark():
 if __name__ == '__main__':
     # --- DATABASE FEATURES DISABLED ---
     # The data seeding section that connects to the database has been removed.
-
+     with app.app_context(): 
+        if mongo.db.users.count_documents({}) == 0:
+            print("Seeding database with demo users...")
+            hashed_password = generate_password_hash("password", method='pbkdf2:sha256')
+            
+            demo_users = [
+                {"username": "teacher", "password": hashed_password, "role": "teacher", "section": "A"},
+                {"username": "student1", "password": hashed_password, "role": "student", "section": "A"},
+                {"username": "student2", "password": hashed_password, "role": "student", "section": "B"},
+            ]
+            mongo.db.users.insert_many(demo_users)
+            print("Demo users created.")
 
     socketio.run(app, host="0.0.0.0", port=port, debug=False,allow_unsafe_werkzeug=True)
+
 
 
