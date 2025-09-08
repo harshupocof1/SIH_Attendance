@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}QR Code Session{% endblock %}
+
+{% block content %}
+<div class="container text-center" data-refresh-rate="{{ qr_refresh_ms }}">
+    <a href="{{ url_for('teacher_dashboard') }}">&larr; Back to Dashboard</a>
+    <h2>QR Code Session</h2>
+    <p>Select a date and checkpoint, then start the session.</p>
+
+    <div class="session-controls">
+        <div class="form-group">
+            <label for="session-date">Date:</label>
+            <input type="date" id="session-date" value="{{ today_date }}">
+        </div>
+        <div class="form-group">
+            <label for="session-checkpoint">Checkpoint:</label>
+            <select id="session-checkpoint">
+                {% for cp in checkpoints %}
+                <option value="{{ cp }}">{{ cp }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+    
+    <div id="qr-container">
+        <img id="qr-image" src="" alt="QR Code will appear here">
+    </div>
+
+    <button id="start-session-btn" class="btn btn-success">Start Session</button>
+    <p id="status">Session is not active.</p>
+    <p id="timer"></p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const socket = io('/teacher');
+        const qrImage = document.getElementById('qr-image');
+        const statusEl = document.getElementById('status');
+        const timerEl = document.getElementById('timer');
+        const startBtn = document.getElementById('start-session-btn');
+        const dateInput = document.getElementById('session-date');
+        const checkpointInput = document.getElementById('session-checkpoint');
+        
+        let qrInterval;
+        let sessionTimeout;
+
+        socket.on('connect', () => statusEl.textContent = 'Connected. Ready to start session.');
+
+        socket.on('new_qr_code', (data) => {
+            qrImage.src = `data:image/png;base64,${data.image}`;
+            statusEl.textContent = `QR code is live. It will refresh automatically.`;
+        });
+        
+        startBtn.addEventListener('click', () => {
+            startBtn.disabled = true;
+            dateInput.disabled = true;
+            checkpointInput.disabled = true;
+            startBtn.textContent = 'Session Active...';
+            
+            if (qrInterval) clearInterval(qrInterval);
+            if (sessionTimeout) clearTimeout(sessionTimeout);
+
+            const sessionData = {
+                date: dateInput.value,
+                checkpoint: checkpointInput.value
+            };
+
+            socket.emit('request_qr_code', sessionData);
+            
+            // Read refresh rate from the data attribute to avoid syntax errors
+            const container = document.querySelector('.container');
+            const refreshRate = parseInt(container.dataset.refreshRate, 10);
+            
+            qrInterval = setInterval(() => socket.emit('request_qr_code', sessionData), refreshRate);
+
+            let timeLeft = 30;
+            const updateTimer = () => timerEl.textContent = `Session ends in ${timeLeft--} seconds.`;
+            updateTimer();
+            const countdownInterval = setInterval(updateTimer, 1000);
+
+            sessionTimeout = setTimeout(() => {
+                clearInterval(qrInterval);
+                clearInterval(countdownInterval);
+                statusEl.textContent = 'Session has expired. Press "Start Session" to begin again.';
+                timerEl.textContent = '';
+                qrImage.src = '';
+                startBtn.disabled = false;
+                dateInput.disabled = false;
+                checkpointInput.disabled = false;
+                startBtn.textContent = 'Start Session';
+            }, 30000);
+        });
+
+        socket.on('disconnect', () => {
+            statusEl.textContent = 'Disconnected from server.';
+            clearInterval(qrInterval);
+            clearTimeout(sessionTimeout);
+        });
+    });
+</script>
+{% endblock %}
+

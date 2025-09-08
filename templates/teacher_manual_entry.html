@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Manual Attendance{% endblock %}
+
+{% block content %}
+<div class="container">
+    <a href="{{ url_for('teacher_dashboard') }}">&larr; Back to Dashboard</a>
+    <h2>Manual Attendance Entry</h2>
+    <p>Select the date, checkpoint, and students to mark as present.</p>
+    
+    <form id="manual-form">
+      <label>Date: <input type="date" id="manual-date" value="{{ today_date }}"></label><br>
+      <label>Checkpoint:
+        <select id="manual-checkpoint">
+          {% for cp in checkpoints %}
+          <option value="{{ cp }}">{{ cp }}</option>
+          {% endfor %}
+        </select>
+      </label><br>
+      <label>Section:
+        <select id="section-select">
+          <option value="all">-- All Sections --</option>
+          {% for sec in sections %}
+          <option value="{{ sec }}">{{ sec }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <h4>Students</h4>
+      <button type="button" id="select-all">Select All</button>
+      <button type="button" id="deselect-all">Deselect All</button>
+      <div id="students-list">
+        {% for student in students %}
+        <div class="student-row" data-section="{{ student.section|default('Unassigned') }}">
+          <label>
+            <input type="checkbox" name="student" value="{{ student._id }}">
+            {{ student.username }} ({{ student.section|default('Unassigned') }})
+          </label>
+        </div>
+        {% endfor %}
+      </div>
+
+      <button type="submit">Mark Selected</button>
+    </form>
+    <div id="form-status"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const form = document.getElementById('manual-form');
+    const formStatus = document.getElementById('form-status');
+    const sectionSelect = document.getElementById('section-select');
+    const studentRows = document.querySelectorAll('.student-row');
+
+    sectionSelect.addEventListener('change', function() {
+        const selected = this.value;
+        studentRows.forEach(row => {
+            if (selected === 'all' || row.dataset.section === selected) {
+                row.style.display = 'block';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    });
+
+    document.getElementById('select-all').addEventListener('click', () => {
+        document.querySelectorAll('#students-list input[type=checkbox]')
+            .forEach(cb => cb.checked = true);
+    });
+    document.getElementById('deselect-all').addEventListener('click', () => {
+        document.querySelectorAll('#students-list input[type=checkbox]')
+            .forEach(cb => cb.checked = false);
+    });
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        formStatus.textContent = 'Submitting...';
+
+        const selected = Array.from(document.querySelectorAll('input[name="student"]:checked'))
+                            .map(cb => cb.value);
+
+        if (selected.length === 0) {
+            formStatus.textContent = 'Please select at least one student.';
+            return;
+        }
+
+        const payload = {
+            student_ids: selected,
+            date: document.getElementById('manual-date').value,
+            checkpoint: document.getElementById('manual-checkpoint').value
+        };
+
+        fetch('/api/manual_bulk_mark', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.success) {
+                formStatus.textContent = `Updated: ${data.updated.join(', ')} | Skipped: ${data.skipped.join(', ')}`;
+            } else {
+                formStatus.textContent = `Error: ${data.error}`;
+            }
+        })
+        .catch(() => {
+            formStatus.textContent = 'A network error occurred.';
+        });
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Attendance Monitor{% endblock %}
+
+{% block content %}
+<div class="container">
+    <a href="{{ url_for('teacher_dashboard') }}">&larr; Back to Dashboard</a>
+    <h2>Live Attendance Monitor</h2>
+    
+    <form method="GET" action="{{ url_for('teacher_monitor') }}" class="monitor-controls">
+        <label for="monitor-date">View Attendance For:</label>
+        <input type="date" id="monitor-date" name="date" value="{{ date_str }}">
+        <button type="submit" class="btn btn-secondary">View Date</button>
+    </form>
+
+    <p>Showing records for <strong>{{ date_str }}</strong>. This table will update in real-time for this date.</p>
+    <table id="attendance-table">
+        <thead>
+            <tr>
+                <th>Student</th>
+                <th>Checkpoint</th>
+                <th>Check-in Time</th>
+                <th>Method</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if daily_doc and daily_doc.records %}
+                {% for record in daily_doc.records|sort(attribute='timestamp', reverse=True) %}
+                <tr>
+                    <td>{{ record.username }}</td>
+                    <td>{{ record.checkpoint }}</td>
+                    <td>{{ record.timestamp.strftime('%I:%M:%S %p') }}</td>
+                    <td>{{ record.method }}</td>
+                </tr>
+                {% endfor %}
+            {% else %}
+            <tr id="no-records-row">
+                <td colspan="4" class="text-center">No students have checked in for this date yet.</td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const socket = io('/teacher');
+        const displayedDate = document.getElementById('monitor-date').value;
+        
+        socket.on('student_checked_in', (data) => {
+            // Only update the table if the incoming record is for the date currently being viewed
+            if (data.date === displayedDate) {
+                const tableBody = document.querySelector("#attendance-table tbody");
+                const noRecordsRow = document.getElementById('no-records-row');
+                
+                if (noRecordsRow) {
+                    noRecordsRow.remove();
+                }
+
+                const newRow = tableBody.insertRow(0); // Insert at the top
+                newRow.innerHTML = `
+                    <td>${data.username}</td>
+                    <td>${data.checkpoint}</td>
+                    <td>${data.timestamp}</td>
+                    <td>Manual</td>
+                `;
+                newRow.classList.add('new-entry');
+            }
+        });
+    });
+</script>
+{% endblock %}
