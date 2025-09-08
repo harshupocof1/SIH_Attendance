@@ -195,10 +195,11 @@ use_mongo = app.config['USE_MONGO']
 if use_mongo:
     try:
         mongo_client = PyMongo(app)
-        mongo_client.db.command('ping')
+        # Test the connection with a simple operation
+        mongo_client.db.users.find_one()
         print("Successfully connected to MongoDB Atlas.")
         use_mongo = True
-    except (ConnectionFailure, OperationFailure) as e:
+    except (ConnectionFailure, OperationFailure, Exception) as e:
         print(f"MongoDB connection failed: {e}. Using in-memory database.")
         use_mongo = False
 else:
@@ -534,7 +535,7 @@ def api_mark_attendance():
     except (BadTimeSignature, Exception): 
         return jsonify({'success': False, 'error': 'Invalid QR Code.'}), 400
 
-@app.route('/api/manual_mark', methods=['POST'])
+@app.route('/api/manual_mark', methods['POST'])
 @login_required
 def manual_mark():
     if current_user.role != 'teacher': 
