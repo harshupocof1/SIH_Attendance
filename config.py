@@ -17,3 +17,4 @@ class Config:
     # --- QR Token Config ---
     QR_REFRESH_RATE_SECONDS = 2
     TOKEN_VALIDITY_SECONDS = 5
+
