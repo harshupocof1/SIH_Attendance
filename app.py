@@ -10,14 +10,9 @@ from datetime import datetime
 from functools import wraps
 
 # Optional imports (use real DB if available)
-try:
-    from bson.objectid import ObjectId as RealObjectId
-    from flask_pymongo import PyMongo
-    REAL_MONGO_AVAILABLE = True
-except Exception:
-    RealObjectId = None
-    PyMongo = None
-    REAL_MONGO_AVAILABLE = False
+mongo = PyMongo(app)  # requires MONGO_URI in config
+ObjectId = RealObjectId
+
 
 from flask import Flask, render_template, jsonify, request, redirect, url_for, flash
 from flask_socketio import SocketIO, emit
@@ -523,5 +518,6 @@ if __name__ == '__main__':
     socketio.run(app, host="0.0.0.0", port=port, debug=False, allow_unsafe_werkzeug=True)
 
 # If running under Gunicorn, leave `app` and `socketio` available for the server to use.
+
 
 
