@@ -243,8 +243,28 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username', '')
         password = request.form.get('password', '')
-        user_data = mongo.db.users.find_one({"username": username})
 
+        # --- DEMO LOGIN FALLBACK ---
+        demo_accounts = {
+            "teacher": {"password": "password", "role": "teacher", "section": "A"},
+            "student1": {"password": "password", "role": "student", "section": "A"},
+            "student2": {"password": "password", "role": "student", "section": "B"},
+        }
+        if username in demo_accounts and password == demo_accounts[username]["password"]:
+            user_data = {
+                "_id": f"demo-{username}",
+                "username": username,
+                "password": generate_password_hash(password),  # still hashed for consistency
+                "role": demo_accounts[username]["role"],
+                "section": demo_accounts[username]["section"],
+            }
+            user = User(user_data)
+            login_user(user)
+            redirect_url = url_for('teacher_dashboard') if user.role == 'teacher' else url_for('student_scan')
+            return redirect(redirect_url)
+
+        # --- NORMAL DATABASE LOGIN ---
+        user_data = mongo.db.users.find_one({"username": username}) if mongo else None
         if not user_data:
             flash(f"No user found with username '{username}'.")
         elif not check_password_hash(user_data['password'], password):
@@ -255,8 +275,8 @@ def login():
             redirect_url = url_for('teacher_dashboard') if user.role == 'teacher' else url_for('student_scan')
             return redirect(redirect_url)
 
-    # NOTE: ensure template exists; if you're running headless use a simple JSON response or create templates.
     return render_template('login.html')
+
 
 @app.route('/logout')
 @login_required
@@ -505,3 +525,4 @@ if __name__ == '__main__':
     socketio.run(app, host="0.0.0.0", port=port, debug=False, allow_unsafe_werkzeug=True)
 
 # If running under Gunicorn, leave `app` and `socketio` available for the server to use.
+
