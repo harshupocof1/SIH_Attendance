@@ -120,10 +120,13 @@ mongo_client = None
 in_memory_db = None
 try:
     mongo_client = PyMongo(app)
+    # Ping the database to check for a successful connection
     mongo_client.db.command('ping')
     print("Successfully connected to MongoDB Atlas.")
-except (ConnectionFailure, OperationFailure) as e:
+except (ConnectionFailure, OperationFailure, AttributeError) as e:
+    # Added AttributeError to handle cases where mongo_client.db is None
     print(f"MongoDB connection failed: {e}. Using in-memory database.")
+    mongo_client = None  # Ensure mongo_client is explicitly None for the fallback to work
     in_memory_db = InMemoryDB()
 
 # Function to get the correct database object (MongoDB or in-memory)
