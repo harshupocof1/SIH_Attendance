@@ -1,8 +1,4 @@
-
-pymongo[srv] # The [srv] is important for connecting to Atlas
-eventlet==0.33.3
-Pillow>=10.0.0
-
+# Core
 Flask
 Flask-SocketIO
 Flask-Login
@@ -11,7 +7,13 @@ itsdangerous
 Werkzeug
 qrcode
 gunicorn
-eventlet
 python-dotenv
 
+# MongoDB Atlas support
+pymongo[srv]
 
+# Async workers (for Socket.IO + Gunicorn)
+eventlet==0.33.3
+
+# For QR code generation (image backend)
+Pillow>=10.0.0
