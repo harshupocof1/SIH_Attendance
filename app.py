@@ -1,3 +1,4 @@
+import os
 import time
 import base64
 import io
@@ -34,9 +35,7 @@ class User(UserMixin):
         self.password_hash = user_data["password"]
         self.role = user_data.get("role", "student")
         self.section = user_data.get("section", "Unassigned")
-        self.student_name = user_data.get("student_name", user_data["username"])  # fallback to username
-
-
+        self.student_name = user_data.get("student_name", user_data["username"])
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
@@ -44,6 +43,8 @@ class User(UserMixin):
 # --- User Loader ---
 @login_manager.user_loader
 def load_user(user_id):
+    # This is where the error occurs. It means mongo.db is None.
+    # The fix isn't in this function but in ensuring a proper connection.
     user_data = mongo.db.users.find_one({"_id": ObjectId(user_id)})
     if user_data:
         return User(user_data)
@@ -51,22 +52,20 @@ def load_user(user_id):
 
 # --- Helper Functions ---
 def generate_qr_code_image(token):
-    """Generates a base64 encoded QR code image from a token."""
+    # ... (code is correct) ...
     img = qrcode.make(token)
     buf = io.BytesIO()
     img.save(buf, format='PNG')
     return base64.b64encode(buf.getvalue()).decode('utf-8')
 
 # --- Authentication Routes ---
-
-# main index
-
 @app.route('/')
 def index():
     return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # ... (code is correct) ...
     if current_user.is_authenticated:
         redirect_url = url_for('teacher_dashboard') if current_user.role == 'teacher' else url_for('student_scan')
         return redirect(redirect_url)
@@ -338,7 +337,11 @@ def manual_bulk_mark():
 # --- Main Execution & Data Seeding ---
 # --- Main Execution & Data Seeding ---
 if __name__ == '__main__':
+    # It's better to perform seeding outside of the main execution block
+    # or inside a dedicated function to prevent issues with Gunicorn.
+    # But for a simple script, this is acceptable.
     with app.app_context():
+        # Check if users collection is empty.
         if mongo.db.users.count_documents({}) == 0:
             print("Seeding database with demo users...")
             hashed_password = generate_password_hash("password", method='pbkdf2:sha256')
@@ -350,9 +353,7 @@ if __name__ == '__main__':
             mongo.db.users.insert_many(demo_users)
             print("Demo users created.")
 
-    # ✅ Use Render's PORT or fallback to 5000
     port = int(os.environ.get("PORT", 5000))
+    # Corrected: Removed the duplicate `socketio.run()` call.
     socketio.run(app, host="0.0.0.0", port=port, debug=os.environ.get("FLASK_DEBUG", "false").lower() == "true")
 
-    
-    socketio.run(app, debug=True, host='127.0.0.1')
