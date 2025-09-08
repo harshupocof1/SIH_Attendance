@@ -196,14 +196,20 @@ def ensure_demo_users():
         print("Demo users created.")
 
 # --- Custom User Class for Flask-Login ---
+# --- Constants ---
+CHECKPOINTS = ["Period 1", "Period 2", "Period 3", "Period 4"]
+
+# --- Custom User Class for Flask-Login ---
 class User(UserMixin):
     def __init__(self, user_data):
-        # support both real ObjectId and MockObjectId
-        self.id = str(user_data.get("_id"))
-        self.username = user_data.get("username")
-        self.password_hash = user_data.get("password")
+        self.id = str(user_data["_id"])
+        self.username = user_data["username"]
+        self.password_hash = user_data["password"]
         self.role = user_data.get("role", "student")
         self.section = user_data.get("section", "Unassigned")
+        self.student_name = user_data.get("student_name", user_data["username"])  # fallback to username
+
+
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
@@ -211,12 +217,7 @@ class User(UserMixin):
 # --- User Loader ---
 @login_manager.user_loader
 def load_user(user_id):
-    # user_id comes in as a string; query should match stored _id (MockObjectId or RealObjectId)
-    try:
-        query_id = ObjectId(user_id)
-    except Exception:
-        query_id = user_id
-    user_data = mongo.db.users.find_one({"_id": query_id})
+    user_data = mongo.db.users.find_one({"_id": ObjectId(user_id)})
     if user_data:
         return User(user_data)
     return None
@@ -230,6 +231,9 @@ def generate_qr_code_image(token):
     return base64.b64encode(buf.getvalue()).decode('utf-8')
 
 # --- Authentication Routes ---
+
+# main index
+
 @app.route('/')
 def index():
     return redirect(url_for('login'))
@@ -237,34 +241,14 @@ def index():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        redirect_url = url_for('teacher_dashboard') if getattr(current_user, 'role', None) == 'teacher' else url_for('student_scan')
+        redirect_url = url_for('teacher_dashboard') if current_user.role == 'teacher' else url_for('student_scan')
         return redirect(redirect_url)
-
+    
     if request.method == 'POST':
-        username = request.form.get('username', '')
-        password = request.form.get('password', '')
-
-        # --- DEMO LOGIN FALLBACK ---
-        demo_accounts = {
-            "teacher": {"password": "password", "role": "teacher", "section": "A"},
-            "student1": {"password": "password", "role": "student", "section": "A"},
-            "student2": {"password": "password", "role": "student", "section": "B"},
-        }
-        if username in demo_accounts and password == demo_accounts[username]["password"]:
-            user_data = {
-                "_id": f"demo-{username}",
-                "username": username,
-                "password": generate_password_hash(password),  # still hashed for consistency
-                "role": demo_accounts[username]["role"],
-                "section": demo_accounts[username]["section"],
-            }
-            user = User(user_data)
-            login_user(user)
-            redirect_url = url_for('teacher_dashboard') if user.role == 'teacher' else url_for('student_scan')
-            return redirect(redirect_url)
-
-        # --- NORMAL DATABASE LOGIN ---
-        user_data = mongo.db.users.find_one({"username": username}) if mongo else None
+        username = request.form['username']
+        password = request.form['password']
+        user_data = mongo.db.users.find_one({"username": username})
+        
         if not user_data:
             flash(f"No user found with username '{username}'.")
         elif not check_password_hash(user_data['password'], password):
@@ -272,11 +256,10 @@ def login():
         else:
             user = User(user_data)
             login_user(user)
-            redirect_url = url_for('teacher_dashboard') if user.role == 'teacher' else url_for('student_scan')
+            redirect_url = url_for('teacher_dashboard') if user.role == 'teacher' else url_for('student_dashboard')
             return redirect(redirect_url)
-
+            
     return render_template('login.html')
-
 
 @app.route('/logout')
 @login_required
@@ -288,19 +271,12 @@ def logout():
 @app.route('/api/student_stats')
 @login_required
 def student_stats():
-    if getattr(current_user, 'role', None) == 'teacher':
+    if current_user.role == 'teacher':
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
 
     student_id = ObjectId(current_user.id)
     total_classes = mongo.db.attendance.count_documents({})
-    # count attended classes where any record has this user_id
-    attended_classes = 0
-    for doc in mongo.db.attendance.find():
-        for rec in doc.get('records', []):
-            if str(rec.get('user_id')) == str(student_id):
-                attended_classes += 1
-                break
-
+    attended_classes = mongo.db.attendance.count_documents({"records.user_id": student_id})
     percentage = round((attended_classes / total_classes) * 100, 2) if total_classes > 0 else 0
 
     today_date = datetime.utcnow().strftime('%Y-%d-%m')
@@ -308,7 +284,7 @@ def student_stats():
     classes_today = 0
     if today_doc:
         classes_today = len({rec['checkpoint'] for rec in today_doc.get("records", [])
-                             if str(rec.get("user_id")) == str(student_id)})
+                             if rec["user_id"] == student_id})
 
     return jsonify({
         'success': True, 'percentage': percentage, 'classes_today': classes_today,
@@ -318,14 +294,14 @@ def student_stats():
 @app.route('/teacher')
 @login_required
 def teacher_dashboard():
-    if getattr(current_user, 'role', None) != 'teacher':
+    if current_user.role != 'teacher':
         return "Access Denied", 403
     return render_template('teacher_dashboard.html')
 
 @app.route('/teacher_qr')
 @login_required
 def teacher_qr():
-    if getattr(current_user, 'role', None) != 'teacher':
+    if current_user.role != 'teacher':
         return "Access Denied", 403
     today_date = datetime.utcnow().strftime('%Y-%d-%m')
     qr_refresh_ms = app.config.get('QR_REFRESH_RATE_SECONDS', 10) * 1000
@@ -334,7 +310,7 @@ def teacher_qr():
 @app.route('/teacher/monitor')
 @login_required
 def teacher_monitor():
-    if getattr(current_user, 'role', None) != 'teacher':
+    if current_user.role != 'teacher':
         return "Access Denied", 403
     date_str = request.args.get('date', datetime.utcnow().strftime('%Y-%d-%m'))
     daily_attendance_doc = mongo.db.attendance.find_one({"date": date_str})
@@ -343,7 +319,7 @@ def teacher_monitor():
 @app.route('/teacher/manual_entry')
 @login_required
 def teacher_manual_entry():
-    if getattr(current_user, 'role', None) != 'teacher':
+    if current_user.role != 'teacher':
         return "Access Denied", 403
     today_date = datetime.utcnow().strftime('%Y-%d-%m')
     students = list(mongo.db.users.find({"role": "student"}))
@@ -355,25 +331,35 @@ def teacher_manual_entry():
 
 @app.route('/student')
 @login_required
-def student_scan():
-    if getattr(current_user, 'role', None) == 'teacher':
+def student_dashboard():
+    name = current_user.student_name
+    if current_user.role == 'teacher':
         return "Access Denied", 403
-    return render_template('student_scan.html')
+    
+
+    
+    return render_template('student_dashboard.html' , name=name)
 
 # --- New Teacher Dashboard Routes ---
+
 @app.route('/teacher/students')
 @login_required
 def teacher_students():
-    if getattr(current_user, 'role', None) != 'teacher':
+    """Route to view all students."""
+    if current_user.role != 'teacher':
         return "Access Denied", 403
+    
     students = list(mongo.db.users.find({"role": "student"}))
     return render_template('teacher_students.html', students=students)
 
 @app.route('/teacher/assignments')
 @login_required
 def teacher_assignments():
-    if getattr(current_user, 'role', None) != 'teacher':
+    """Placeholder route for the assignments section."""
+    if current_user.role != 'teacher':
         return "Access Denied", 403
+    
+    # In a full implementation, you'd fetch assignment data from the database.
     assignments = [
         {"title": "Math Homework 1", "due_date": "2025-09-10", "status": "Pending"},
         {"title": "Science Project", "due_date": "2025-09-12", "status": "Submitted"}
@@ -383,8 +369,11 @@ def teacher_assignments():
 @app.route('/teacher/grades')
 @login_required
 def teacher_grades():
-    if getattr(current_user, 'role', None) != 'teacher':
+    """Placeholder route for the grades section."""
+    if current_user.role != 'teacher':
         return "Access Denied", 403
+
+    # In a full implementation, you'd fetch grade data.
     grades = [
         {"student_name": "Amit Sharma", "subject": "Math", "grade": "A"},
         {"student_name": "Priya Verma", "subject": "Science", "grade": "B+"},
@@ -392,7 +381,48 @@ def teacher_grades():
     ]
     return render_template('teacher_grades.html', grades=grades)
 
-# --- WebSocket Events ---
+@app.route('/teacher/add_student')
+@login_required
+def teacher_add_student():
+    """Route to view the add student form."""
+    if current_user.role != 'teacher':
+        return "Access Denied", 403
+    return render_template('add_student.html')
+from werkzeug.security import generate_password_hash
+
+@app.route('/api/add_student', methods=['POST'])
+@login_required
+def api_add_student():
+    """API endpoint for teachers to add a new student."""
+    if current_user.role != 'teacher':
+        return jsonify({'success': False, 'error': 'Access Denied'}), 403
+
+    data = request.get_json()
+    required_fields = ['studentName', 'rollNumber', 'section', 'username', 'password']
+    for field in required_fields:
+        if not data.get(field):
+            return jsonify({'success': False, 'error': f'Missing field: {field}'}), 400
+
+    # Check for duplicate username
+    if mongo.db.users.find_one({"username": data['username']}):
+        return jsonify({'success': False, 'error': 'Username already exists'}), 400
+
+    # Insert student into DB
+    new_student = {
+        "username": data['username'],
+        "password": generate_password_hash(data['password'], method='pbkdf2:sha256'),
+        "role": "student",
+        "student_name": data['studentName'],
+        "roll_number": data['rollNumber'],
+        "section": data['section'],
+        "status": "absent"
+    }
+    result = mongo.db.users.insert_one(new_student)
+
+    return jsonify({'success': True, 'message': 'Student added successfully', 'id': str(result.inserted_id)})
+
+
+# --- API and WebSocket Logic ---
 @socketio.on('connect', namespace='/teacher')
 def teacher_connect():
     print("Teacher client connected")
@@ -400,73 +430,50 @@ def teacher_connect():
 @socketio.on('request_qr_code', namespace='/teacher')
 def handle_qr_request(data):
     date, checkpoint = data.get('date'), data.get('checkpoint')
-    if not date or not checkpoint:
-        return
+    if not date or not checkpoint: return
     token = serializer.dumps({'date': date, 'checkpoint': checkpoint, 'ts': time.time()})
     qr_image = generate_qr_code_image(token)
     emit('new_qr_code', {'image': qr_image})
 
-# --- API Endpoints ---
 @app.route('/api/mark_attendance', methods=['POST'])
 @login_required
 def api_mark_attendance():
     token = request.get_json().get('token')
-    if not token:
-        return jsonify({'success': False, 'error': 'Token is missing.'}), 400
+    if not token: return jsonify({'success': False, 'error': 'Token is missing.'}), 400
 
     try:
         payload = serializer.loads(token, max_age=app.config.get('TOKEN_VALIDITY_SECONDS', 15))
         date, checkpoint = payload['date'], payload['checkpoint']
 
-        existing_record = None
-        for doc in mongo.db.attendance.find({"date": date}):
-            for rec in doc.get("records", []):
-                if str(rec.get("user_id")) == str(ObjectId(current_user.id)) and rec.get("checkpoint") == checkpoint:
-                    existing_record = True
-                    break
-            if existing_record:
-                break
-
-        if existing_record:
-            return jsonify({'success': False, 'error': f'Attendance already marked for {checkpoint}.'}), 409
+        existing_record = mongo.db.attendance.find_one({
+            "date": date, "records": {"$elemMatch": {"user_id": ObjectId(current_user.id), "checkpoint": checkpoint}}
+        })
+        if existing_record: return jsonify({'success': False, 'error': f'Attendance already marked for {checkpoint}.'}), 409
 
         new_record = {"user_id": ObjectId(current_user.id), "username": current_user.username, "timestamp": datetime.utcnow(), "checkpoint": checkpoint, "method": "QR"}
         mongo.db.attendance.update_one({"date": date}, {"$push": {"records": new_record}}, upsert=True)
-        # Emit to teachers
         socketio.emit('student_checked_in', {**new_record, 'timestamp': new_record['timestamp'].strftime('%I:%M:%S %p'), 'date': date}, namespace='/teacher', broadcast=True)
         return jsonify({'success': True, 'message': 'Attendance marked successfully!'})
 
-    except SignatureExpired:
-        return jsonify({'success': False, 'error': 'QR Code has expired.'}), 400
-    except (BadTimeSignature, Exception):
-        return jsonify({'success': False, 'error': 'Invalid QR Code.'}), 400
+    except SignatureExpired: return jsonify({'success': False, 'error': 'QR Code has expired.'}), 400
+    except (BadTimeSignature, Exception): return jsonify({'success': False, 'error': 'Invalid QR Code.'}), 400
 
 @app.route('/api/manual_mark', methods=['POST'])
 @login_required
 def manual_mark():
-    if getattr(current_user, 'role', None) != 'teacher':
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if current_user.role != 'teacher': return jsonify({'success': False, 'error': 'Unauthorized'}), 403
 
     data = request.get_json()
     student_id, date, checkpoint = data.get('student_id'), data.get('date'), data.get('checkpoint')
-    if not all([student_id, date, checkpoint]):
-        return jsonify({'success': False, 'error': 'Missing data.'}), 400
+    if not all([student_id, date, checkpoint]): return jsonify({'success': False, 'error': 'Missing data.'}), 400
 
     student_data = mongo.db.users.find_one({"_id": ObjectId(student_id)})
-    if not student_data:
-        return jsonify({'success': False, 'error': 'Student not found'}), 404
+    if not student_data: return jsonify({'success': False, 'error': 'Student not found'}), 404
 
-    # check existing
-    existing_record = None
-    for doc in mongo.db.attendance.find({"date": date}):
-        for rec in doc.get("records", []):
-            if str(rec.get("user_id")) == str(ObjectId(student_id)) and rec.get("checkpoint") == checkpoint:
-                existing_record = True
-                break
-        if existing_record:
-            break
-    if existing_record:
-        return jsonify({'success': False, 'error': f'{student_data["username"]} already marked for {checkpoint}.'}), 409
+    existing_record = mongo.db.attendance.find_one({
+        "date": date, "records": {"$elemMatch": {"user_id": ObjectId(student_id), "checkpoint": checkpoint}}
+    })
+    if existing_record: return jsonify({'success': False, 'error': f'{student_data["username"]} already marked for {checkpoint}.'}), 409
 
     new_record = {"user_id": ObjectId(student_id), "username": student_data["username"], "timestamp": datetime.utcnow(), "checkpoint": checkpoint, "method": "Manual"}
     mongo.db.attendance.update_one({"date": date}, {"$push": {"records": new_record}}, upsert=True)
@@ -476,32 +483,23 @@ def manual_mark():
 @app.route('/api/manual_bulk_mark', methods=['POST'])
 @login_required
 def manual_bulk_mark():
-    if getattr(current_user, 'role', None) != 'teacher':
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if current_user.role != 'teacher': return jsonify({'success': False, 'error': 'Unauthorized'}), 403
 
     data = request.get_json()
     student_ids, date, checkpoint = data.get('student_ids', []), data.get('date'), data.get('checkpoint')
-    if not student_ids or not date or not checkpoint:
-        return jsonify({'success': False, 'error': 'Missing data'}), 400
+    if not student_ids or not date or not checkpoint: return jsonify({'success': False, 'error': 'Missing data'}), 400
 
     updated, skipped = [], []
     for sid in student_ids:
         student_data = mongo.db.users.find_one({"_id": ObjectId(sid)})
         if not student_data:
-            skipped.append(f"ID:{sid}")
-            continue
+            skipped.append(f"ID:{sid}"); continue
 
-        existing_record = None
-        for doc in mongo.db.attendance.find({"date": date}):
-            for rec in doc.get("records", []):
-                if str(rec.get("user_id")) == str(ObjectId(sid)) and rec.get("checkpoint") == checkpoint:
-                    existing_record = True
-                    break
-            if existing_record:
-                break
+        existing_record = mongo.db.attendance.find_one({
+            "date": date, "records": {"$elemMatch": {"user_id": ObjectId(sid), "checkpoint": checkpoint}}
+        })
         if existing_record:
-            skipped.append(student_data["username"])
-            continue
+            skipped.append(student_data["username"]); continue
 
         new_record = {"user_id": ObjectId(sid), "username": student_data["username"], "timestamp": datetime.utcnow(), "checkpoint": checkpoint, "method": "Manual"}
         mongo.db.attendance.update_one({"date": date}, {"$push": {"records": new_record}}, upsert=True)
@@ -525,4 +523,5 @@ if __name__ == '__main__':
     socketio.run(app, host="0.0.0.0", port=port, debug=False, allow_unsafe_werkzeug=True)
 
 # If running under Gunicorn, leave `app` and `socketio` available for the server to use.
+
 
