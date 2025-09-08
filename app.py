@@ -300,7 +300,8 @@ if __name__ == '__main__':
             mongo.db.users.insert_many(demo_users)
             print("Demo users created.")
 
-    socketio.run(app, host="0.0.0.0", port=port, debug=False,allow_unsafe_werkzeug=True)
+socketio.run(app, host="0.0.0.0", port=port, debug=False,allow_unsafe_werkzeug=True)
+
 
 
 
