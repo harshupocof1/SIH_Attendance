@@ -350,42 +350,50 @@
                 qrReader.start({ facingMode: "environment" }, config, onScanSuccess, onScanError);
             });
 
-            // --- Chatbot Functionality ---
-            const addMessage = (text, sender) => {
-                const messageDiv = document.createElement('div');
-                messageDiv.classList.add('message', `${sender}-message`);
-                const paragraph = document.createElement('p');
-                paragraph.textContent = text;
-                messageDiv.appendChild(paragraph);
-                chatMessages.appendChild(messageDiv);
-                chatMessages.scrollTop = chatMessages.scrollHeight;
-            };
+        // --- Chatbot Functionality ---
+const addMessage = (text, sender) => {
+    const messageDiv = document.createElement('div');
+    messageDiv.classList.add('message', `${sender}-message`);
+    const paragraph = document.createElement('p');
+    paragraph.textContent = text;
+    messageDiv.appendChild(paragraph);
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+};
 
-            const handleChatInput = () => {
-                const userMessage = chatInput.value.trim();
-                if (userMessage === '') return;
+const handleChatInput = async () => {
+    const userMessage = chatInput.value.trim();
+    if (userMessage === '') return;
 
-                addMessage(userMessage, 'user');
-                chatInput.value = '';
+    addMessage(userMessage, 'user');
+    chatInput.value = '';
 
-                // Simple AI-like response logic
-                let botResponse = 'I am still learning to respond to complex queries. For emergencies, please use the contacts listed in the Emergency section.';
-                const lowerCaseMessage = userMessage.toLowerCase();
+    try {
+        // Send message to Flask backend
+        const response = await fetch("/api/chatbot", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: userMessage })
+        });
 
-                if (lowerCaseMessage.includes('emergency') || lowerCaseMessage.includes('help')) {
-                    botResponse = "If this is a real emergency, please dial the numbers listed in the Emergency tab immediately. For non-urgent help, please provide more details.";
-                } else if (lowerCaseMessage.includes('attendance')) {
-                    botResponse = "To mark your attendance, please go to the 'Attendance' tab and use the QR code scanner.";
-                } else if (lowerCaseMessage.includes('hello') || lowerCaseMessage.includes('hi')) {
-                    botResponse = "Hello! How can I assist you with campus safety or information?";
-                } else if (lowerCaseMessage.includes('who are you')) {
-                    botResponse = "I am Campus Guardian, your automated safety and information assistant.";
-                }
+        const data = await response.json();
+        if (data.success) {
+            addMessage(data.reply, 'bot');
+        } else {
+            addMessage("Sorry, I couldn't process that request.", 'bot');
+        }
+    } catch (err) {
+        console.error("Chatbot error:", err);
+        addMessage("⚠️ Error connecting to chatbot service.", 'bot');
+    }
+};
 
-                setTimeout(() => {
-                    addMessage(botResponse, 'bot');
-                }, 1000);
-            };
+chatSendBtn.addEventListener('click', handleChatInput);
+chatInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        handleChatInput();
+    }
+});
 
             chatSendBtn.addEventListener('click', handleChatInput);
 
