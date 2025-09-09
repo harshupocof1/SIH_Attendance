@@ -14,8 +14,4 @@ scikit-learn
 pandas
 numpy
 
-# 🔹 Speech & audio processing
-SpeechRecognition
-pyttsx3
-pyaudio
-webrtcvad
+
