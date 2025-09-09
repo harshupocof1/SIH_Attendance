@@ -251,8 +251,9 @@
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            // Updated to connect with the correct URL
-            const socket = io(window.location.protocol + '//' + document.domain + ':' + location.port + '/teacher');
+            // This is the standard way to connect, which works for both local and deployed environments.
+            const socket = io('/teacher');
+
             const qrImage = document.getElementById('qr-image');
             const statusEl = document.getElementById('status');
             const timerEl = document.getElementById('timer');
@@ -330,3 +331,4 @@
     </script>
 </body>
 </html>
+
