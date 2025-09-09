@@ -8,10 +8,12 @@ qrcode
 Pillow
 itsdangerous
 python-dotenv
+gunicorn
 
 # 🔹 Chatbot & ML dependencies
 scikit-learn
 pandas
 numpy
+
 
 
