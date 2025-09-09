@@ -1,19 +1,21 @@
-# Core
 Flask
-Flask-SocketIO
-Flask-Login
 Flask-PyMongo
-itsdangerous
-Werkzeug
+pymongo[srv]   # The [srv] is important for connecting to Atlas
+Flask-Login
+Flask-SocketIO
+eventlet
 qrcode
-gunicorn
+Pillow
+itsdangerous
 python-dotenv
 
-# MongoDB Atlas support
-pymongo[srv]
+# 🔹 Chatbot & ML dependencies
+scikit-learn
+pandas
+numpy
 
-# Async workers (for Socket.IO + Gunicorn)
-eventlet==0.33.3
-
-# For QR code generation (image backend)
-Pillow>=10.0.0
+# 🔹 Speech & audio processing
+SpeechRecognition
+pyttsx3
+pyaudio
+webrtcvad
