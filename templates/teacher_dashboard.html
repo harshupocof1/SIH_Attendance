@@ -66,7 +66,7 @@
           <div class="stat-card">
             <div class="stat-header">
               <div>
-                <div class="stat-value">120</div>
+                <div class="stat-value">{{ total_students }}</div>
                 <div class="stat-label">Total Students</div>
               </div>
               <div class="stat-icon success">🎓</div>
@@ -138,29 +138,32 @@
       <!-- Students -->
       <section id="students" class="section">
         <div class="card">
-          <div class="card-header"><h2 class="card-title">Recent Students</h2></div>
+          <div class="card-header"><h2 class="card-title">Total Students</h2></div>
           <div class="card-body">
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Class</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr><td>Amit Sharma</td><td>10-A</td><td>Present</td></tr>
-                <tr><td>Priya Verma</td><td>10-B</td><td>Absent</td></tr>
-                <tr><td>Rohit Kumar</td><td>9-C</td><td>Present</td></tr>
-              </tbody>
-            </table>
+            {% if students %}
+                        <ul style="list-style: none; padding: 0; margin: 0;">
+                        {% for student in students %}
+                            <li style="padding: 10px 0; border-bottom: 1px solid var(--border-color);">
+                                <span style="font-weight: 600;">{{ student.student_name }}</span>
+                                <span style="font-size: 0.9em; color: var(--secondary-color);">({{ student.section|default('Unassigned') }})</span>
+                            </li>
+                        {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p style="color: var(--secondary-color); font-style: italic;">No students found.</p>
+                    {% endif %}
           </div>
         </div>
       </section>
 <!-- Attendance Section with Buttons Only -->
 <section id="attendance" class="section">
-  <div class="card">
+
     <div class="card-body" style="text-align: center; padding: 60px;">
+        <div class="card">
+    <button class="btn btn-secondary"
+              style="margin: 10px; padding: 16px 32px; font-size: 18px;"
+              onclick="window.location.href='{{ url_for('teacher_monitor') }}'">
+        Attendance Monitor
       <button class="btn btn-primary"
               style="margin: 10px; padding: 16px 32px; font-size: 18px;"
               onclick="window.location.href='{{ url_for('teacher_qr') }}'">
