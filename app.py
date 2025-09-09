@@ -57,10 +57,37 @@ def generate_qr_code_image(token):
     img.save(buf, format='PNG')
     return base64.b64encode(buf.getvalue()).decode('utf-8')
 
+def _update_attendance_record(student_id, student_username, date, checkpoint, method):
+    """
+    Helper function to update a single attendance record.
+    This consolidates the logic from multiple routes.
+    """
+    existing_record = mongo.db.attendance.find_one({
+        "date": date,
+        "records": {"$elemMatch": {"user_id": ObjectId(student_id), "checkpoint": checkpoint}}
+    })
+    
+    if existing_record:
+        return {'success': False, 'error': f'{student_username} already marked for {checkpoint}.'}, 409
+
+    new_record = {
+        "user_id": ObjectId(student_id),
+        "username": student_username,
+        "timestamp": datetime.utcnow(),
+        "checkpoint": checkpoint,
+        "method": method
+    }
+    mongo.db.attendance.update_one({"date": date}, {"$push": {"records": new_record}}, upsert=True)
+    
+    socketio.emit(
+        'student_checked_in', 
+        {**new_record, 'timestamp': new_record['timestamp'].strftime('%I:%M:%S %p'), 'date': date}, 
+        namespace='/teacher', 
+        broadcast=True
+    )
+    return {'success': True, 'username': student_username}
+
 # --- Authentication Routes ---
-
-# main index
-
 @app.route('/')
 def index():
     return redirect(url_for('login'))
@@ -123,7 +150,8 @@ def student_stats():
 def teacher_dashboard():
     if current_user.role != 'teacher':
         return "Access Denied", 403
-    return render_template('teacher_dashboard.html')
+    students = list(mongo.db.users.find({"role": "student"}))
+    return render_template('teacher_dashboard.html', students=students)
 
 @app.route('/teacher_qr')
 @login_required
@@ -163,21 +191,11 @@ def student_dashboard():
     if current_user.role == 'teacher':
         return "Access Denied", 403
     
-
+    student_count = mongo.db.users.count_documents({"role": "student"})
     
-    return render_template('student_dashboard.html' , name=name)
+    return render_template('student_dashboard.html' , name=name , total_students = student_count)
 
 # --- New Teacher Dashboard Routes ---
-
-@app.route('/teacher/students')
-@login_required
-def teacher_students():
-    """Route to view all students."""
-    if current_user.role != 'teacher':
-        return "Access Denied", 403
-    
-    students = list(mongo.db.users.find({"role": "student"}))
-    return render_template('teacher_students.html', students=students)
 
 @app.route('/teacher/assignments')
 @login_required
@@ -186,7 +204,6 @@ def teacher_assignments():
     if current_user.role != 'teacher':
         return "Access Denied", 403
     
-    # In a full implementation, you'd fetch assignment data from the database.
     assignments = [
         {"title": "Math Homework 1", "due_date": "2025-09-10", "status": "Pending"},
         {"title": "Science Project", "due_date": "2025-09-12", "status": "Submitted"}
@@ -200,7 +217,6 @@ def teacher_grades():
     if current_user.role != 'teacher':
         return "Access Denied", 403
 
-    # In a full implementation, you'd fetch grade data.
     grades = [
         {"student_name": "Amit Sharma", "subject": "Math", "grade": "A"},
         {"student_name": "Priya Verma", "subject": "Science", "grade": "B+"},
@@ -230,11 +246,9 @@ def api_add_student():
         if not data.get(field):
             return jsonify({'success': False, 'error': f'Missing field: {field}'}), 400
 
-    # Check for duplicate username
     if mongo.db.users.find_one({"username": data['username']}):
         return jsonify({'success': False, 'error': 'Username already exists'}), 400
 
-    # Insert student into DB
     new_student = {
         "username": data['username'],
         "password": generate_password_hash(data['password'], method='pbkdf2:sha256'),
@@ -271,7 +285,7 @@ def api_mark_attendance():
     try:
         payload = serializer.loads(token, max_age=app.config.get('TOKEN_VALIDITY_SECONDS', 15))
         date, checkpoint = payload['date'], payload['checkpoint']
-
+        
         existing_record = mongo.db.attendance.find_one({
             "date": date, "records": {"$elemMatch": {"user_id": ObjectId(current_user.id), "checkpoint": checkpoint}}
         })
@@ -313,27 +327,63 @@ def manual_bulk_mark():
     if current_user.role != 'teacher': return jsonify({'success': False, 'error': 'Unauthorized'}), 403
 
     data = request.get_json()
-    student_ids, date, checkpoint = data.get('student_ids', []), data.get('date'), data.get('checkpoint')
-    if not student_ids or not date or not checkpoint: return jsonify({'success': False, 'error': 'Missing data'}), 400
+    students_with_status = data.get('students')
+    date = data.get('date')
+    checkpoint = data.get('checkpoint')
+
+    if not students_with_status or not date or not checkpoint:
+        return jsonify({'success': False, 'error': 'Missing data'}), 400
 
     updated, skipped = [], []
-    for sid in student_ids:
-        student_data = mongo.db.users.find_one({"_id": ObjectId(sid)})
-        if not student_data:
-            skipped.append(f"ID:{sid}"); continue
+    for student_data in students_with_status:
+        student_id = student_data.get('id')
+        is_present = student_data.get('present')
 
+        if not student_id:
+            skipped.append("Missing ID"); continue
+
+        student_info = mongo.db.users.find_one({"_id": ObjectId(student_id)})
+        if not student_info:
+            skipped.append(f"ID:{student_id}"); continue
+        
+        # Check if attendance is already marked
         existing_record = mongo.db.attendance.find_one({
-            "date": date, "records": {"$elemMatch": {"user_id": ObjectId(sid), "checkpoint": checkpoint}}
+            "date": date, "records": {"$elemMatch": {"user_id": ObjectId(student_id), "checkpoint": checkpoint}}
         })
-        if existing_record:
-            skipped.append(student_data["username"]); continue
 
-        new_record = {"user_id": ObjectId(sid), "username": student_data["username"], "timestamp": datetime.utcnow(), "checkpoint": checkpoint, "method": "Manual"}
-        mongo.db.attendance.update_one({"date": date}, {"$push": {"records": new_record}}, upsert=True)
-        updated.append(student_data["username"])
-        socketio.emit('student_checked_in', {**new_record, 'timestamp': new_record['timestamp'].strftime('%I:%M:%S %p'), 'date': date}, namespace='/teacher', broadcast=True)
-
+        if is_present:
+            if not existing_record:
+                # Mark present
+                new_record = {
+                    "user_id": ObjectId(student_id),
+                    "username": student_info["username"],
+                    "timestamp": datetime.utcnow(),
+                    "checkpoint": checkpoint,
+                    "method": "Manual",
+                    "status": "present" # Adding status field
+                }
+                mongo.db.attendance.update_one(
+                    {"date": date}, 
+                    {"$push": {"records": new_record}}, 
+                    upsert=True
+                )
+                updated.append(student_info["username"])
+                socketio.emit('student_checked_in', {**new_record, 'timestamp': new_record['timestamp'].strftime('%I:%M:%S %p'), 'date': date}, namespace='/teacher', broadcast=True)
+            else:
+                skipped.append(f"{student_info['username']} (already present)")
+        else:
+            # Student is marked absent, check if they were present and remove the record
+            if existing_record:
+                mongo.db.attendance.update_one(
+                    {"date": date},
+                    {"$pull": {"records": {"user_id": ObjectId(student_id), "checkpoint": checkpoint}}}
+                )
+                updated.append(f"{student_info['username']} (marked absent)")
+            else:
+                skipped.append(f"{student_info['username']} (already absent)")
+    
     return jsonify({'success': True, 'updated': updated, 'skipped': skipped})
+
 
 # --- Main Execution & Data Seeding ---
 # --- Main Execution & Data Seeding ---
@@ -356,3 +406,4 @@ if __name__ == '__main__':
 
     
     socketio.run(app, debug=True, host='127.0.0.1')
+
