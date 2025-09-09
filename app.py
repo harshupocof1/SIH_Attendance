@@ -11,7 +11,7 @@ from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignat
 from werkzeug.security import generate_password_hash, check_password_hash
 from config import Config
 import qrcode
-
+from chatbot import CampusChatbot
 # --- App Initialization ---
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -406,4 +406,5 @@ if __name__ == '__main__':
 
     
     socketio.run(app, debug=True, host='127.0.0.1')
+
 
