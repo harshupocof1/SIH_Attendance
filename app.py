@@ -1,6 +1,8 @@
 import time
 import base64
 import io
+import threading  # <-- ADDED: For background tasks
+import queue 
 from datetime import datetime
 from bson.objectid import ObjectId
 from flask import Flask, render_template, jsonify, request, redirect, url_for, flash
@@ -11,6 +13,7 @@ from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignat
 from werkzeug.security import generate_password_hash, check_password_hash
 from config import Config
 import qrcode
+import pyttsx3
 from chatbot import CampusChatbot
 # --- App Initialization ---
 app = Flask(__name__)
@@ -22,6 +25,38 @@ login_manager.login_view = 'login'
 
 # Setup for generating and verifying secure, timed tokens
 serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
+
+# Initialize chatbot once
+chatbot = CampusChatbot("chat_dataset.csv")
+
+# --- MODIFIED: Advanced TTS setup for non-blocking replies ---
+try:
+    tts_engine = pyttsx3.init()
+    # A queue to hold the text that needs to be spoken
+    tts_queue = queue.Queue()
+
+    def tts_worker():
+        """Processes the speech queue in a dedicated thread."""
+        while True:
+            try:
+                # Wait until an item is available in the queue
+                text_to_speak = tts_queue.get()
+                tts_engine.say(text_to_speak)
+                tts_engine.runAndWait()
+                # Mark the task as done
+                tts_queue.task_done()
+            except Exception as e:
+                print(f"Error in TTS worker thread: {e}")
+
+    # Start the worker thread as a daemon so it exits when the main app exits
+    tts_thread = threading.Thread(target=tts_worker, daemon=True)
+    tts_thread.start()
+
+except Exception as e:
+    print(f"Warning: Could not initialize text-to-speech engine. Error: {e}")
+    tts_engine = None
+    tts_queue = None
+# -------------------------------------------------------------
 
 # --- Constants ---
 CHECKPOINTS = ["Period 1", "Period 2", "Period 3", "Period 4"]
@@ -194,6 +229,25 @@ def student_dashboard():
     student_count = mongo.db.users.count_documents({"role": "student"})
     
     return render_template('student_dashboard.html' , name=name , total_students = student_count)
+
+@app.route("/api/chatbot", methods=["POST"])
+@login_required
+def chatbot_reply():
+    data = request.get_json()
+    user_text = data.get("message", "").strip()
+
+    if not user_text:
+        return jsonify({"success": False, "error": "Empty message"}), 400
+
+    reply = chatbot.get_reply(user_text)
+    # --- MODIFIED: Add the reply to the speech queue instead of speaking directly ---
+    if tts_queue:
+        # This is non-blocking. It just adds the text to the queue and moves on.
+        tts_queue.put(reply)
+    # ---------------------------------------------------------------------------------
+    
+    # This response is now sent immediately, without waiting for the speech to finish.
+    return jsonify({"success": True, "reply": reply})
 
 # --- New Teacher Dashboard Routes ---
 
@@ -406,5 +460,6 @@ if __name__ == '__main__':
 
     
     socketio.run(app, debug=True, host='127.0.0.1')
+
 
 
