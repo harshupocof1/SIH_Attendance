@@ -167,10 +167,11 @@
         .dark-mode #qr-container {
             border-color: #555;
         }
-        #qr-image {
-            max-width: 100%;
+        #qrcode {
+            align-items: center;
+            width: 100%;
+
             height: auto;
-            transition: opacity 0.3s ease;
         }
         .btn {
             padding: 12px 24px;
@@ -221,7 +222,7 @@
     </button>
     <div class="container" data-refresh-rate="{{ qr_refresh_ms }}">
         <a href="{{ url_for('teacher_dashboard') }}">&larr; Back to Dashboard</a>
-        <h2>QR Code Session</h2>
+        <h2>QR Code Generation</h2>
         <p>Select a date and checkpoint, then start the session.</p>
 
         <div class="session-controls">
@@ -240,7 +241,7 @@
         </div>
         
         <div id="qr-container">
-            <img id="qr-image" src="" alt="QR Code will appear here">
+            <div id="qrcode"></div>
         </div>
 
         <button id="start-session-btn" class="btn btn-success">Start Session</button>
@@ -249,11 +250,11 @@
     </div>
     
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            // Updated to connect with the correct URL
             const socket = io(window.location.protocol + '//' + document.domain + ':' + location.port + '/teacher');
-            const qrImage = document.getElementById('qr-image');
+            const qrcodeContainer = document.getElementById('qrcode');
             const statusEl = document.getElementById('status');
             const timerEl = document.getElementById('timer');
             const startBtn = document.getElementById('start-session-btn');
@@ -274,11 +275,15 @@
             }
             document.querySelector('.dark-mode-toggle').addEventListener('click', toggleDarkMode);
 
-
             socket.on('connect', () => statusEl.textContent = 'Connected. Ready to start session.');
 
             socket.on('new_qr_code', (data) => {
-                qrImage.src = `data:image/png;base64,${data.image}`;
+                qrcodeContainer.innerHTML = ""; // clear previous
+                new QRCode(qrcodeContainer, {
+                    text: data.token,
+                    width: 256,
+                    height: 256
+                });
                 statusEl.textContent = `QR code is live. It will refresh automatically.`;
             });
             
@@ -313,7 +318,7 @@
                     clearInterval(countdownInterval);
                     statusEl.textContent = 'Session has expired. Press "Start Session" to begin again.';
                     timerEl.textContent = '';
-                    qrImage.src = '';
+                    qrcodeContainer.innerHTML = "";
                     startBtn.disabled = false;
                     dateInput.disabled = false;
                     checkpointInput.disabled = false;
