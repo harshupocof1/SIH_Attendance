@@ -1,7 +1,8 @@
 import time
 import base64
 import io
-
+import eventlet
+eventlet.monkey_patch()
 import queue 
 from datetime import datetime
 from bson.objectid import ObjectId
@@ -428,6 +429,7 @@ if __name__ == '__main__':
 
     
     socketio.run(app, debug=True, host='127.0.0.1')
+
 
 
 
