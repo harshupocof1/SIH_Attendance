@@ -293,10 +293,10 @@ def teacher_connect():
 @socketio.on('request_qr_code', namespace='/teacher')
 def handle_qr_request(data):
     date, checkpoint = data.get('date'), data.get('checkpoint')
-    if not date or not checkpoint:
-        return
+    if not date or not checkpoint: return
     token = serializer.dumps({'date': date, 'checkpoint': checkpoint, 'ts': time.time()})
-    emit('new_qr_code', {'token': token})
+    qr_image = generate_qr_code_image(token)
+    emit('new_qr_code', {'image': qr_image})
 
 
 @app.route('/api/mark_attendance', methods=['POST'])
@@ -429,6 +429,7 @@ if __name__ == '__main__':
 
     
     socketio.run(app, debug=True, host='127.0.0.1')
+
 
 
 
