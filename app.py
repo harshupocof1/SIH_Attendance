@@ -292,9 +292,11 @@ def teacher_connect():
 @socketio.on('request_qr_code', namespace='/teacher')
 def handle_qr_request(data):
     date, checkpoint = data.get('date'), data.get('checkpoint')
-    if not date or not checkpoint: return
+    if not date or not checkpoint:
+        return
     token = serializer.dumps({'date': date, 'checkpoint': checkpoint, 'ts': time.time()})
     emit('new_qr_code', {'token': token})
+
 
 @app.route('/api/mark_attendance', methods=['POST'])
 @login_required
@@ -426,6 +428,7 @@ if __name__ == '__main__':
 
     
     socketio.run(app, debug=True, host='127.0.0.1')
+
 
 
 
