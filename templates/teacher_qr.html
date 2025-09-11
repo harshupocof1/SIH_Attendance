@@ -167,11 +167,10 @@
         .dark-mode #qr-container {
             border-color: #555;
         }
-        #qrcode {
-            align-items: center;
-            width: 100%;
-
+        #qr-image {
+            max-width: 100%;
             height: auto;
+            transition: opacity 0.3s ease;
         }
         .btn {
             padding: 12px 24px;
@@ -241,7 +240,7 @@
         </div>
         
         <div id="qr-container">
-            <div id="qrcode"></div>
+            <img id="qr-image" src="" alt="QR Code will appear here">
         </div>
 
         <button id="start-session-btn" class="btn btn-success">Start Session</button>
@@ -250,13 +249,11 @@
     </div>
     
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-    
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            // Updated to connect with the correct URL
             const socket = io(window.location.protocol + '//' + document.domain + ':' + location.port + '/teacher');
-            const qrcodeContainer = document.getElementById('qrcode');
+            const qrImage = document.getElementById('qr-image');
             const statusEl = document.getElementById('status');
             const timerEl = document.getElementById('timer');
             const startBtn = document.getElementById('start-session-btn');
@@ -277,15 +274,11 @@
             }
             document.querySelector('.dark-mode-toggle').addEventListener('click', toggleDarkMode);
 
+
             socket.on('connect', () => statusEl.textContent = 'Connected. Ready to start session.');
 
             socket.on('new_qr_code', (data) => {
-                qrcodeContainer.innerHTML = ""; // clear previous
-                new QRCode(qrcodeContainer, {
-                    text: data.token,
-                    width: 256,
-                    height: 256
-                });
+                qrImage.src = `data:image/png;base64,${data.image}`;
                 statusEl.textContent = `QR code is live. It will refresh automatically.`;
             });
             
@@ -320,7 +313,7 @@
                     clearInterval(countdownInterval);
                     statusEl.textContent = 'Session has expired. Press "Start Session" to begin again.';
                     timerEl.textContent = '';
-                    qrcodeContainer.innerHTML = "";
+                    qrImage.src = '';
                     startBtn.disabled = false;
                     dateInput.disabled = false;
                     checkpointInput.disabled = false;
