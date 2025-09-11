@@ -9,11 +9,13 @@ Pillow
 itsdangerous
 python-dotenv
 gunicorn
+eventlet
 
 # 🔹 Chatbot & ML dependencies
 scikit-learn
 pandas
 numpy
+
 
 
 
