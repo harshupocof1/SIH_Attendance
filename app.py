@@ -103,7 +103,7 @@ def index():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        redirect_url = url_for('teacher_dashboard') if current_user.role == 'teacher' else url_for('student_scan')
+        redirect_url = url_for('teacher_dashboard') if current_user.role == 'teacher' else url_for('student_dashboard')
         return redirect(redirect_url)
     
     if request.method == 'POST':
@@ -429,6 +429,7 @@ if __name__ == '__main__':
 
     
     socketio.run(app, debug=True, host='127.0.0.1')
+
 
 
 
