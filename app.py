@@ -294,8 +294,7 @@ def handle_qr_request(data):
     date, checkpoint = data.get('date'), data.get('checkpoint')
     if not date or not checkpoint: return
     token = serializer.dumps({'date': date, 'checkpoint': checkpoint, 'ts': time.time()})
-    qr_image = generate_qr_code_image(token)
-    emit('new_qr_code', {'image': qr_image})
+    emit('new_qr_code', {'token': token})
 
 @app.route('/api/mark_attendance', methods=['POST'])
 @login_required
@@ -427,6 +426,7 @@ if __name__ == '__main__':
 
     
     socketio.run(app, debug=True, host='127.0.0.1')
+
 
 
 
