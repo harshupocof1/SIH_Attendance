@@ -18,10 +18,11 @@ numpy
 
 
 # face reco
-face-recognition
-cmake
-dlib
-opencv-python
+#face-recognition
+#cmake
+#dlib
+#opencv-python
+
 
 
 
