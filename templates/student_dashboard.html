@@ -222,23 +222,8 @@
                                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remarks</th>
                                     </tr>
                                 </thead>
-                                <tbody class="bg-white divide-y divide-gray-200">
-                                    <tr>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2023-10-01</td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Present</td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">On time</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2023-10-02</td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Absent</td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Sick</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">2023-10-03</td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Present</td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">On time</td>
-                                    </tr>
-                                </tbody>
+                                
+                                    <tbody id="attendance-record"></tbody>
                             </table>
                         </div>
                     </div>
@@ -322,6 +307,8 @@
     </div>
 
     <script src="https://unpkg.com/html5-qrcode@2.0.9/dist/html5-qrcode.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
     <script>
     document.addEventListener('DOMContentLoaded', () => {
         // --- DOM Elements ---
@@ -338,6 +325,7 @@
         const micBtn = document.getElementById('mic-btn');
         const vocalStatus = document.getElementById('vocal-status');
         const vocalChatMessages = document.getElementById('vocal-chat-messages');
+        const attendanceRecord = document.getElementById('attendance-record');
 
         // --- Theme Toggle Functionality (Original) ---
         function setTheme(isDark) {
@@ -383,16 +371,41 @@
             html5QrCode = new Html5Qrcode("qr-reader");
         }
 
-        const onScanSuccess = (decodedText, decodedResult) => {
-            console.log(`Code matched = ${decodedText}`, decodedResult);
-            html5QrCode.stop().then(() => {
-                // This logic is from the original file, it can be updated to use fetch
+        const onScanSuccess = async (decodedText) => {
+            html5QrCode.stop().then(async () => {
                 qrScanResult.textContent = `Scanned: ${decodedText}`;
                 qrScanResult.classList.add('success');
-            }).catch(err => console.error("Failed to stop QR code scanner:", err));
+
+                // --- NEW: Send attendance mark to server ---
+                try {
+                    const res = await fetch(`${window.location.origin}/api/mark_attendance`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ qr_data: decodedText })
+                    });
+                    const data = await res.json();
+
+                    // Update attendance record table live
+                    if (data.success) {
+                        const row = document.createElement("tr");
+                        row.innerHTML = `
+                            <td>${data.date}</td>
+                            <td>${data.status}</td>
+                            <td>${data.remarks || ''}</td>
+                        `;
+                        attendanceRecord.prepend(row);
+                    } else {
+                        alert("Attendance not recorded: " + data.message);
+                    }
+                } catch (err) {
+                    console.error("Error marking attendance:", err);
+                    alert("Failed to mark attendance.");
+                }
+            });
         };
-        const onScanError = (errorMessage) => { /* console.error(errorMessage) */ };
-        
+
+        const onScanError = (errorMessage) => { /* optional */ };
+
         startScanBtn.addEventListener('click', () => {
             qrReaderContainer.style.display = 'block';
             startScanBtn.style.display = 'none';
@@ -426,6 +439,15 @@
                 });
                 const data = await response.json();
                 addMessage(data.success ? data.reply : "Sorry, I couldn't process that.", 'bot', messageContainer);
+
+                // Speak the reply for vocal chat
+                if (messageContainer === vocalChatMessages) {
+                    const utterance = new SpeechSynthesisUtterance(data.reply);
+                    utterance.rate = 1;
+                    utterance.pitch = 1;
+                    utterance.volume = 1;
+                    window.speechSynthesis.speak(utterance);
+                }
             } catch (err) {
                 console.error("Chatbot error:", err);
                 addMessage("⚠️ Error connecting to chatbot service.", 'bot', messageContainer);
@@ -476,7 +498,7 @@
 
         // --- Dynamic Stats ---
         const fetchStudentStats = async () => {
-             try {
+            try {
                 const response = await fetch(`${window.location.origin}/api/student_stats`);
                 const data = await response.json();
                 if (data.success) {
@@ -484,13 +506,12 @@
                     document.getElementById('classes_today').textContent = `${data.classes_today}/${data.total_classes_today}`;
                     document.getElementById('emergency_contacts').textContent = data.emergency_contacts;
                 }
-             } catch (error) {
+            } catch (error) {
                 console.error('Failed to fetch student stats:', error);
-             }
+            }
         };
         fetchStudentStats();
     });
     </script>
 </body>
 </html>
-
