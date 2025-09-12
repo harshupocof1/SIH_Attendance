@@ -316,9 +316,12 @@ def api_mark_attendance():
         return jsonify(result), 200 if result['success'] else 409
 
     except SignatureExpired:
-        return jsonify({'success': False, 'message': 'QR Code has expired.'}), 400
-    except (BadTimeSignature, Exception):
-        return jsonify({'success': False, 'message': 'Invalid QR Code.'}), 400
+        return jsonify({'success': False, 'message': 'QR Code expired'}), 400
+    except BadTimeSignature:
+        return jsonify({'success': False, 'message': 'QR Code signature invalid'}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'}), 400
+
 
 @app.route('/api/manual_mark', methods=['POST'])
 @login_required
@@ -427,6 +430,7 @@ if __name__ == '__main__':
 
     
     socketio.run(app, debug=True, host='127.0.0.1')
+
 
 
 
