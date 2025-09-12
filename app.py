@@ -66,17 +66,16 @@ def generate_qr_code_image(token):
     return base64.b64encode(buf.getvalue()).decode('utf-8')
 
 def _update_attendance_record(student_id, student_username, date, checkpoint, method):
-    """
-    Helper function to update a single attendance record.
-    This consolidates the logic from multiple routes.
-    """
     existing_record = mongo.db.attendance.find_one({
         "date": date,
         "records": {"$elemMatch": {"user_id": ObjectId(student_id), "checkpoint": checkpoint}}
     })
     
     if existing_record:
-        return {'success': False, 'error': f'{student_username} already marked for {checkpoint}.'}, 409
+        return {
+            "success": False,
+            "message": f"{student_username} already marked for {checkpoint}."
+        }
 
     new_record = {
         "user_id": ObjectId(student_id),
@@ -88,12 +87,19 @@ def _update_attendance_record(student_id, student_username, date, checkpoint, me
     mongo.db.attendance.update_one({"date": date}, {"$push": {"records": new_record}}, upsert=True)
     
     socketio.emit(
-        'student_checked_in', 
-        {**new_record, 'timestamp': new_record['timestamp'].strftime('%I:%M:%S %p'), 'date': date}, 
-        namespace='/teacher', 
+        "student_checked_in",
+        {**new_record, "timestamp": new_record["timestamp"].strftime("%I:%M:%S %p"), "date": date},
+        namespace="/teacher",
         broadcast=True
     )
-    return {'success': True, 'username': student_username}
+
+    return {
+        "success": True,
+        "username": student_username,
+        "status": "Present",
+        "remarks": "Marked via QR"
+    }
+
 
 # --- Authentication Routes ---
 @app.route('/')
@@ -430,6 +436,7 @@ if __name__ == '__main__':
 
     
     socketio.run(app, debug=True, host='127.0.0.1')
+
 
 
 
