@@ -166,7 +166,7 @@ def teacher_dashboard():
 def teacher_qr():
     if current_user.role != 'teacher':
         return "Access Denied", 403
-    today_date = datetime.utcnow().strftime('%Y-%d-%m')
+    today_date = datetime.utcnow().strftime('%Y-%m-%d')
     qr_refresh_ms = app.config.get('QR_REFRESH_RATE_SECONDS', 10) * 1000
     return render_template('teacher_qr.html', qr_refresh_ms=qr_refresh_ms, today_date=today_date, checkpoints=CHECKPOINTS)
 
@@ -427,6 +427,7 @@ if __name__ == '__main__':
 
     
     socketio.run(app, debug=True, host='127.0.0.1')
+
 
 
 
