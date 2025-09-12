@@ -10,13 +10,10 @@ from flask import Flask, render_template, jsonify, request, redirect, url_for, f
 from flask_socketio import SocketIO, emit
 from flask_login import LoginManager, login_user, logout_user, current_user, login_required, UserMixin
 from flask_pymongo import PyMongo
-import face_recognition
-import numpy as np
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadTimeSignature
 from werkzeug.security import generate_password_hash, check_password_hash
 from config import Config
 import qrcode
-import cv2
 
 from chatbot import CampusChatbot
 # --- App Initialization ---
@@ -201,44 +198,16 @@ def teacher_manual_entry():
         today_date=today_date, checkpoints=CHECKPOINTS
     )
 
-@app.route("/student")
+@app.route('/student')
 @login_required
 def student_dashboard():
-    user_data = mongo.db.users.find_one({"_id": ObjectId(current_user.id)})
-    has_face = bool(user_data.get("face_encoding"))
-
-    return render_template("student_dashboard.html", has_face=has_face, student_name=user_data["student_name"])
-
-@app.route("/api/register_face", methods=["POST"])
-@login_required
-def register_face():
-    try:
-        data = request.get_json()
-        image_data = data.get("image")
-        if not image_data:
-            return jsonify({"success": False, "message": "No image received"}), 400
-
-        # Decode image
-        image_bytes = base64.b64decode(image_data.split(",")[1])
-        np_img = np.frombuffer(image_bytes, np.uint8)
-        frame = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
-
-        # Extract encoding
-        encodings = face_recognition.face_encodings(frame)
-        if not encodings:
-            return jsonify({"success": False, "message": "No face detected"}), 400
-
-        encoding = encodings[0].tolist()
-        mongo.db.users.update_one(
-            {"_id": ObjectId(current_user.id)},
-            {"$set": {"face_encoding": encoding}}
-        )
-
-        return jsonify({"success": True})
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 500
-
-
+    name = current_user.student_name
+    if current_user.role == 'teacher':
+        return "Access Denied", 403
+    
+    student_count = mongo.db.users.count_documents({"role": "student"})
+    
+    return render_template('student_dashboard.html' , name=name , total_students = student_count)
 
 @app.route("/api/chatbot", methods=["POST"])
 @login_required
@@ -469,20 +438,3 @@ if __name__ == '__main__':
 
     
     socketio.run(app, debug=True, host='127.0.0.1')
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
