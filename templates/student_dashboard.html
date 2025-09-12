@@ -371,43 +371,41 @@
             html5QrCode = new Html5Qrcode("qr-reader");
         }
 
-        const onScanSuccess = async (decodedText) => {
-            html5QrCode.stop().then(async () => {
-                if (qrScanResult) {
-                    qrScanResult.textContent = `Scanned: ${decodedText}`;
-                    qrScanResult.classList.add('success');
-                }
+      const onScanSuccess = async (decodedText) => {
+    html5QrCode.stop().then(async () => {
+        if (qrScanResult) {
+            qrScanResult.textContent = `Scanned: ${decodedText}`;
+            qrScanResult.classList.add('success');
+        }
 
-                // --- NEW: Send attendance mark to server ---
-                try {
-                    const res = await fetch(`${window.location.origin}/api/mark_attendance`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ qr_data: decodedText })
-                    });
-                    const data = await res.json();
-
-                    // Update attendance record table live
-                     if (data.success) {
-        alert(`✅ Attendance recorded for ${data.username}`);
-        const row = document.createElement("tr");
-        row.innerHTML = `
-            <td>${new Date().toLocaleDateString()}</td>
-            <td>Present</td>
-            <td>Marked via QR</td>
-        `;
-        attendanceRecord.prepend(row);
-                        } else {
-        alert("❌ " + (data.message || "Attendance not recorded"));
-    }
-
-                } catch (err) {
-                    console.error("Error marking attendance:", err);
-                    alert("Failed to mark attendance.");
-                }
+        // --- NEW: Send attendance mark to server ---
+        try {
+            const res = await fetch(`${window.location.origin}/api/mark_attendance`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ qr_data: decodedText })
             });
-        };
+            const data = await res.json();
 
+            // Update attendance record table live
+            if (res.ok && data.success) {
+                alert(`✅ Attendance recorded for ${data.username}`);
+                const row = document.createElement("tr");
+                row.innerHTML = `
+                    <td>${new Date().toLocaleDateString()}</td>
+                    <td>${data.status}</td>
+                    <td>${data.remarks}</td>
+                `;
+                attendanceRecord.prepend(row);
+            } else {
+                alert("❌ " + (data.message || "Attendance not recorded"));
+            }
+        } catch (err) {
+            console.error("Error marking attendance:", err);
+            alert("⚠️ Error communicating with server.");
+        }
+    });
+};
         const onScanError = (errorMessage) => { /* optional */ };
 
         startScanBtn.addEventListener('click', () => {
@@ -519,5 +517,6 @@
     </script>
 </body>
 </html>
+
 
 
