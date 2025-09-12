@@ -197,18 +197,6 @@
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
                             Scan QR Code
                         </button>
-                        {% if not has_face %}
-<div id="faceEnrollModal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:9999;">
-  <div style="background:white;padding:20px;border-radius:12px;text-align:center;">
-    <h2>👤 Face Registration Required</h2>
-    <p>Please look at the camera to register your face.</p>
-    <video id="faceEnrollVideo" autoplay playsinline width="300"></video>
-    <br>
-    <button id="captureFaceBtn" class="btn btn-primary">Register Face</button>
-  </div>
-</div>
-{% endif %}
-
                         <div id="qr-reader-container" class="mt-4" style="display: none;">
                             <div id="qr-reader"></div>
                             <div id="qr-scan-result" class="mt-2 font-bold"></div>
@@ -235,7 +223,7 @@
                                     </tr>
                                 </thead>
                                 
-                                <tbody id="attendance-record"></tbody>
+                                    <tbody id="attendance-record"></tbody>
                             </table>
                         </div>
                     </div>
@@ -321,231 +309,163 @@
     <script src="https://unpkg.com/html5-qrcode@2.0.9/dist/html5-qrcode.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
-  <script>
-document.addEventListener("DOMContentLoaded", () => {
-    initDashboard().catch(err => console.error("Init error:", err));
-});
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- DOM Elements ---
+        const navItems = document.querySelectorAll('.nav-item');
+        const sections = document.querySelectorAll('.section');
+        const themeToggleBtn = document.getElementById('themeToggle');
+        const themeIcon = document.getElementById('themeIcon');
+        const startScanBtn = document.getElementById('start-scan-btn');
+        const qrReaderContainer = document.getElementById('qr-reader-container');
+        const qrScanResult = document.getElementById('qr-scan-result');
+        const chatMessages = document.getElementById('chat-messages');
+        const chatInput = document.getElementById('chat-input');
+        const chatSendBtn = document.getElementById('chat-send-btn');
+        const micBtn = document.getElementById('mic-btn');
+        const vocalStatus = document.getElementById('vocal-status');
+        const vocalChatMessages = document.getElementById('vocal-chat-messages');
+        const attendanceRecord = document.getElementById('attendance-record');
 
-async function initDashboard() {
-    // --- DOM Elements ---
-    const navItems = document.querySelectorAll('.nav-item');
-    const sections = document.querySelectorAll('.section');
-    const themeToggleBtn = document.getElementById('themeToggle');
-    const themeIcon = document.getElementById('themeIcon');
-    const startScanBtn = document.getElementById('start-scan-btn');
-    const qrReaderContainer = document.getElementById('qr-reader-container');
-    const qrScanResult = document.getElementById('qr-scan-result');
-    const chatMessages = document.getElementById('chat-messages');
-    const chatInput = document.getElementById('chat-input');
-    const chatSendBtn = document.getElementById('chat-send-btn');
-    const micBtn = document.getElementById('mic-btn');
-    const vocalStatus = document.getElementById('vocal-status');
-    const vocalChatMessages = document.getElementById('vocal-chat-messages');
-    const attendanceRecord = document.getElementById('attendance-record');
-    const faceModal = document.getElementById("faceEnrollModal");
-    const faceVideo = document.getElementById("faceEnrollVideo");
-    const captureBtn = document.getElementById("captureFaceBtn");
-
-    // --- Theme Toggle ---
-    function setTheme(isDark) {
-        if (isDark) {
-            document.body.classList.add('dark-mode');
-            themeIcon.textContent = '☀️';
-        } else {
-            document.body.classList.remove('dark-mode');
-            themeIcon.textContent = '🌙';
-        }
-    }
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme) {
-        setTheme(savedTheme === 'dark');
-    } else {
-        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        setTheme(prefersDark);
-    }
-    themeToggleBtn.addEventListener('click', () => {
-        const isDark = document.body.classList.toggle('dark-mode');
-        localStorage.setItem('theme', isDark ? 'dark' : 'light');
-        setTheme(isDark);
-    });
-
-    // --- Navigation & Sections ---
-    const switchSection = (targetId) => {
-        sections.forEach(section => section.classList.remove('active'));
-        navItems.forEach(item => item.classList.remove('active'));
-        document.getElementById(targetId).classList.add('active');
-        document.querySelector(`.nav-item[data-section="${targetId}"]`).classList.add('active');
-    };
-    navItems.forEach(item => {
-        item.addEventListener('click', () => switchSection(item.getAttribute('data-section')));
-    });
-    const featureCards = document.querySelectorAll('.feature-card[data-section-target]');
-    featureCards.forEach(card => {
-        card.addEventListener('click', () => switchSection(card.getAttribute('data-section-target')));
-    });
-
-    // --- QR Scanner ---
-    let html5QrCode;
-    if (typeof Html5Qrcode !== 'undefined') {
-        html5QrCode = new Html5Qrcode("qr-reader");
-    }
-
-    const onScanSuccess = async (decodedText) => {
-        await html5QrCode.stop();
-
-        qrScanResult.textContent = `Scanned: ${decodedText}`;
-        qrScanResult.classList.add('success');
-
-        try {
-            const res = await fetch(`${window.location.origin}/api/mark_attendance`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ qr_data: decodedText })
-            });
-            const data = await res.json();
-
-            if (res.ok && data.success) {
-                alert(`✅ Attendance recorded for ${data.username || 'You'}`);
-                const row = document.createElement("tr");
-                row.innerHTML = `
-                    <td>${new Date().toLocaleDateString()}</td>
-                    <td>${data.status || "Present"}</td>
-                    <td>${data.remarks || "Marked via QR"}</td>
-                `;
-                attendanceRecord.prepend(row);
+        // --- Theme Toggle Functionality (Original) ---
+        function setTheme(isDark) {
+            if (isDark) {
+                document.body.classList.add('dark-mode');
+                themeIcon.textContent = '☀️';
             } else {
-                alert("❌ " + (data.message || "Attendance not recorded"));
+                document.body.classList.remove('dark-mode');
+                themeIcon.textContent = '🌙';
             }
-        } catch (err) {
-            console.error("Error marking attendance:", err);
-            alert("⚠️ Error communicating with server.");
         }
-
-        // Reset UI for next scan
-        qrReaderContainer.style.display = 'none';
-        startScanBtn.style.display = 'inline-flex';
-    };
-
-    const onScanError = (errorMessage) => {
-        console.warn("QR Scan error:", errorMessage);
-    };
-
-    startScanBtn.addEventListener('click', () => {
-        qrReaderContainer.style.display = 'block';
-        startScanBtn.style.display = 'none';
-        if (html5QrCode) {
-            html5QrCode.start(
-                { facingMode: "environment" },
-                { fps: 10, qrbox: 250 },
-                onScanSuccess,
-                onScanError
-            );
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme) {
+            setTheme(savedTheme === 'dark');
         } else {
-            alert("⚠️ QR Scanner not available.");
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            setTheme(prefersDark);
         }
-    });
+        themeToggleBtn.addEventListener('click', () => {
+            const isDark = document.body.classList.toggle('dark-mode');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            setTheme(isDark);
+        });
 
-    // --- Face Enrollment ---
-    if (faceModal && faceVideo && captureBtn) {
-        let enrollStream;
-        try {
-            enrollStream = await navigator.mediaDevices.getUserMedia({ video: true });
-            faceVideo.srcObject = enrollStream;
-            await new Promise(resolve => (faceVideo.onloadedmetadata = resolve));
-            await faceVideo.play();
-        } catch (err) {
-            console.error("Camera access error:", err);
-            alert("⚠️ Unable to access camera for face enrollment.");
+        // --- Navigation & Section Switching (Original) ---
+        const switchSection = (targetId) => {
+            sections.forEach(section => section.classList.remove('active'));
+            navItems.forEach(item => item.classList.remove('active'));
+            document.getElementById(targetId).classList.add('active');
+            document.querySelector(`.nav-item[data-section="${targetId}"]`).classList.add('active');
+        };
+        navItems.forEach(item => {
+            item.addEventListener('click', () => switchSection(item.getAttribute('data-section')));
+        });
+        const featureCards = document.querySelectorAll('.feature-card[data-section-target]');
+        featureCards.forEach(card => {
+            card.addEventListener('click', () => switchSection(card.getAttribute('data-section-target')));
+        });
+
+        // --- QR Code Scanner Functionality (Original) ---
+        let html5QrCode;
+        if (typeof Html5Qrcode !== 'undefined') {
+            html5QrCode = new Html5Qrcode("qr-reader");
         }
 
-        captureBtn.addEventListener("click", async () => {
-            if (faceVideo.videoWidth === 0 || faceVideo.videoHeight === 0) {
-                alert("⚠️ Camera not ready, please wait a moment.");
-                return;
-            }
-            const canvas = document.createElement("canvas");
-            canvas.width = faceVideo.videoWidth;
-            canvas.height = faceVideo.videoHeight;
-            canvas.getContext("2d").drawImage(faceVideo, 0, 0);
-            const faceImage = canvas.toDataURL("image/png");
+        const onScanSuccess = async (decodedText) => {
+            html5QrCode.stop().then(async () => {
+                qrScanResult.textContent = `Scanned: ${decodedText}`;
+                qrScanResult.classList.add('success');
 
-            if (enrollStream) {
-                enrollStream.getTracks().forEach(track => track.stop());
-                faceVideo.srcObject = null;
-            }
+                // --- NEW: Send attendance mark to server ---
+                try {
+                    const res = await fetch(`${window.location.origin}/api/mark_attendance`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ qr_data: decodedText })
+                    });
+                    const data = await res.json();
 
-            try {
-                const res = await fetch(`${window.location.origin}/api/register_face`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ image: faceImage })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    alert("✅ Face registered successfully!");
-                    faceModal.remove();
-                } else {
-                    alert("❌ " + (data.message || "Face registration failed"));
+                    // Update attendance record table live
+                    if (data.success) {
+                        const row = document.createElement("tr");
+                        row.innerHTML = `
+                            <td>${data.date}</td>
+                            <td>${data.status}</td>
+                            <td>${data.remarks || ''}</td>
+                        `;
+                        attendanceRecord.prepend(row);
+                    } else {
+                        alert("Attendance not recorded: " + data.message);
+                    }
+                } catch (err) {
+                    console.error("Error marking attendance:", err);
+                    alert("Failed to mark attendance.");
                 }
-            } catch (err) {
-                console.error(err);
-                alert("⚠️ Error registering face.");
+            });
+        };
+
+        const onScanError = (errorMessage) => { /* optional */ };
+
+        startScanBtn.addEventListener('click', () => {
+            qrReaderContainer.style.display = 'block';
+            startScanBtn.style.display = 'none';
+            if (html5QrCode) {
+                html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScanSuccess, onScanError);
             }
         });
-    }
 
-    // --- Chat Functions ---
-    const addMessage = (text, sender, container) => {
-        const messageDiv = document.createElement('div');
-        messageDiv.classList.add('message', `${sender}-message`);
-        const paragraph = document.createElement('p');
-        paragraph.textContent = text;
-        messageDiv.appendChild(paragraph);
-        container.appendChild(messageDiv);
-        container.scrollTop = container.scrollHeight;
-    };
+        // --- Universal Chat & API Logic ---
+        const addMessage = (text, sender, container) => {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', `${sender}-message`);
+            const paragraph = document.createElement('p');
+            paragraph.textContent = text;
+            messageDiv.appendChild(paragraph);
+            container.appendChild(messageDiv);
+            container.scrollTop = container.scrollHeight;
+        };
 
-    const handleChatRequest = async (userMessage, messageContainer) => {
-        if (!userMessage) return;
-        addMessage(userMessage, 'user', messageContainer);
-        if (messageContainer === chatMessages) {
-            chatInput.value = '';
-        }
-        try {
-            const response = await fetch(`${window.location.origin}/api/chatbot`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message: userMessage })
-            });
-            const data = await response.json();
-            const reply = data.success ? data.reply : "Sorry, I couldn't process that.";
-            addMessage(reply, 'bot', messageContainer);
-
-            if (messageContainer === vocalChatMessages) {
-                const utterance = new SpeechSynthesisUtterance(reply);
-                utterance.rate = 1;
-                utterance.pitch = 1;
-                utterance.volume = 1;
-                window.speechSynthesis.speak(utterance);
+        const handleChatRequest = async (userMessage, messageContainer) => {
+            if (!userMessage) return;
+            addMessage(userMessage, 'user', messageContainer);
+            if (messageContainer === chatMessages) {
+                chatInput.value = '';
             }
-        } catch (err) {
-            console.error("Chatbot error:", err);
-            addMessage("⚠️ Error connecting to chatbot service.", 'bot', messageContainer);
-        }
-    };
+            try {
+                const response = await fetch(`${window.location.origin}/api/chatbot`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ message: userMessage })
+                });
+                const data = await response.json();
+                addMessage(data.success ? data.reply : "Sorry, I couldn't process that.", 'bot', messageContainer);
 
-    if (chatSendBtn && chatInput) {
+                // Speak the reply for vocal chat
+                if (messageContainer === vocalChatMessages) {
+                    const utterance = new SpeechSynthesisUtterance(data.reply);
+                    utterance.rate = 1;
+                    utterance.pitch = 1;
+                    utterance.volume = 1;
+                    window.speechSynthesis.speak(utterance);
+                }
+            } catch (err) {
+                console.error("Chatbot error:", err);
+                addMessage("⚠️ Error connecting to chatbot service.", 'bot', messageContainer);
+            }
+        };
+
+        // --- Event Listeners for Text Chat ---
         chatSendBtn.addEventListener('click', () => handleChatRequest(chatInput.value.trim(), chatMessages));
         chatInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') handleChatRequest(chatInput.value.trim(), chatMessages);
         });
-    }
 
-    // --- Speech Recognition ---
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (micBtn && vocalStatus) {
+        // --- Speech Recognition Functionality ---
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition;
+
         if (SpeechRecognition) {
-            const recognition = new SpeechRecognition();
+            recognition = new SpeechRecognition();
             recognition.continuous = false;
             recognition.lang = 'en-US';
             recognition.interimResults = false;
@@ -575,31 +495,23 @@ async function initDashboard() {
             micBtn.disabled = true;
             vocalStatus.textContent = "Speech recognition not supported.";
         }
-    }
 
-    // --- Student Stats ---
-    const fetchStudentStats = async () => {
-        try {
-            const response = await fetch(`${window.location.origin}/api/student_stats`);
-            const data = await response.json();
-            if (data.success) {
-                document.getElementById('attendance_percentage').textContent = `${data.percentage}%`;
-                document.getElementById('classes_today').textContent = `${data.classes_today}/${data.total_classes_today}`;
-                document.getElementById('emergency_contacts').textContent = data.emergency_contacts;
+        // --- Dynamic Stats ---
+        const fetchStudentStats = async () => {
+            try {
+                const response = await fetch(`${window.location.origin}/api/student_stats`);
+                const data = await response.json();
+                if (data.success) {
+                    document.getElementById('attendance_percentage').textContent = `${data.percentage}%`;
+                    document.getElementById('classes_today').textContent = `${data.classes_today}/${data.total_classes_today}`;
+                    document.getElementById('emergency_contacts').textContent = data.emergency_contacts;
+                }
+            } catch (error) {
+                console.error('Failed to fetch student stats:', error);
             }
-        } catch (error) {
-            console.error('Failed to fetch student stats:', error);
-        }
-    };
-    fetchStudentStats();
-}
-</script>
-
-
-
+        };
+        fetchStudentStats();
+    });
+    </script>
 </body>
 </html>
-
-
-
-
