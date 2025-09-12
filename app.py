@@ -303,7 +303,7 @@ def handle_qr_request(data):
 @login_required
 def api_mark_attendance():
     """Endpoint for students to mark attendance using a QR code token."""
-    token = request.get_json().get('token')
+    token = request.get_json().get('qr_data')
     
     try:
         payload = serializer.loads(token, max_age=app.config.get('TOKEN_VALIDITY_SECONDS', 15))
@@ -427,6 +427,7 @@ if __name__ == '__main__':
 
     
     socketio.run(app, debug=True, host='127.0.0.1')
+
 
 
 
