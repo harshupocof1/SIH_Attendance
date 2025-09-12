@@ -389,6 +389,7 @@
 
                     // Update attendance record table live
                     if (data.success) {
+                        alert("Attendance recorded");
                         const row = document.createElement("tr");
                         row.innerHTML = `
                             <td>${new Date().toLocaleDateString()}</td>
@@ -517,3 +518,4 @@
     </script>
 </body>
 </html>
+
