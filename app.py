@@ -305,28 +305,30 @@ def handle_qr_request(data):
     emit('new_qr_code', {'image': qr_image})
 
 
-@app.route('/api/mark_attendance', methods=['POST'])
+
+@app.route("/api/mark_attendance", methods=["POST"])
 @login_required
 def api_mark_attendance():
-    """Endpoint for students to mark attendance using a QR code token."""
-    token = request.get_json().get('qr_data')
+    token = request.get_json().get("qr_data")
     
     try:
-        payload = serializer.loads(token, max_age=app.config.get('TOKEN_VALIDITY_SECONDS', 15))
-        date, checkpoint = payload['date'], payload['checkpoint']
-        
-        # Centralized attendance marking logic using the helper function
+        payload = serializer.loads(token, max_age=app.config.get("TOKEN_VALIDITY_SECONDS", 15))
+        date, checkpoint = payload["date"], payload["checkpoint"]
+
         result = _update_attendance_record(str(current_user.id), current_user.username, date, checkpoint, "QR")
-        
-        # Return the result from the helper function directly
-        return jsonify(result), 200 if result['success'] else 409
+
+        if result["success"]:
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 409
 
     except SignatureExpired:
-        return jsonify({'success': False, 'message': 'QR Code expired'}), 400
+        return jsonify({"success": False, "message": "QR Code expired"}), 400
     except BadTimeSignature:
-        return jsonify({'success': False, 'message': 'QR Code signature invalid'}), 400
+        return jsonify({"success": False, "message": "Invalid QR token"}), 400
     except Exception as e:
-        return jsonify({'success': False, 'message': f'Error: {str(e)}'}), 400
+        return jsonify({"success": False, "message": f"Error: {str(e)}"}), 500
+
 
 
 @app.route('/api/manual_mark', methods=['POST'])
@@ -436,6 +438,7 @@ if __name__ == '__main__':
 
     
     socketio.run(app, debug=True, host='127.0.0.1')
+
 
 
 
