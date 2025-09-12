@@ -388,18 +388,19 @@
                     const data = await res.json();
 
                     // Update attendance record table live
-                    if (data.success) {
-                        alert("Attendance recorded");
-                        const row = document.createElement("tr");
-                        row.innerHTML = `
-                            <td>${new Date().toLocaleDateString()}</td>
-                            <td>${data.status}</td>
-                            <td>${data.remarks || ''}</td>
-                        `;
-                        attendanceRecord.prepend(row);
-                    } else {
-                        alert("Attendance not recorded: " + data.message);
-                    }
+                     if (data.success) {
+        alert(`✅ Attendance recorded for ${data.username}`);
+        const row = document.createElement("tr");
+        row.innerHTML = `
+            <td>${new Date().toLocaleDateString()}</td>
+            <td>Present</td>
+            <td>Marked via QR</td>
+        `;
+        attendanceRecord.prepend(row);
+                        } else {
+        alert("❌ " + (data.message || "Attendance not recorded"));
+    }
+
                 } catch (err) {
                     console.error("Error marking attendance:", err);
                     alert("Failed to mark attendance.");
@@ -518,4 +519,5 @@
     </script>
 </body>
 </html>
+
 
