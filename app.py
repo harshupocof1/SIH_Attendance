@@ -73,8 +73,10 @@ def _update_attendance_record(student_id, student_username, date, checkpoint, me
     
     if existing_record:
         return {
-            "success": False,
-            "message": f"{student_username} already marked for {checkpoint}."
+            "success": True,  # <-- treat already marked as success
+            "username": student_username,
+            "status": "Already Present",
+            "remarks": f"Already marked for {checkpoint}"
         }
 
     new_record = {
@@ -97,8 +99,9 @@ def _update_attendance_record(student_id, student_username, date, checkpoint, me
         "success": True,
         "username": student_username,
         "status": "Present",
-        "remarks": "Marked via QR"
+        "remarks": f"Marked via {method}"
     }
+
 
 
 # --- Authentication Routes ---
@@ -438,3 +441,4 @@ if __name__ == '__main__':
 
     
     socketio.run(app, debug=True, host='127.0.0.1')
+
