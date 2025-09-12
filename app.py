@@ -302,25 +302,23 @@ def handle_qr_request(data):
 @app.route('/api/mark_attendance', methods=['POST'])
 @login_required
 def api_mark_attendance():
+    """Endpoint for students to mark attendance using a QR code token."""
     token = request.get_json().get('token')
-    if not token: return jsonify({'success': False, 'error': 'Token is missing.'}), 400
-
+    
     try:
         payload = serializer.loads(token, max_age=app.config.get('TOKEN_VALIDITY_SECONDS', 15))
         date, checkpoint = payload['date'], payload['checkpoint']
         
-        existing_record = mongo.db.attendance.find_one({
-            "date": date, "records": {"$elemMatch": {"user_id": ObjectId(current_user.id), "checkpoint": checkpoint}}
-        })
-        if existing_record: return jsonify({'success': False, 'error': f'Attendance already marked for {checkpoint}.'}), 409
+        # Centralized attendance marking logic using the helper function
+        result = _update_attendance_record(str(current_user.id), current_user.username, date, checkpoint, "QR")
+        
+        # Return the result from the helper function directly
+        return jsonify(result), 200 if result['success'] else 409
 
-        new_record = {"user_id": ObjectId(current_user.id), "username": current_user.username, "timestamp": datetime.utcnow(), "checkpoint": checkpoint, "method": "QR"}
-        mongo.db.attendance.update_one({"date": date}, {"$push": {"records": new_record}}, upsert=True)
-        socketio.emit('student_checked_in', {**new_record, 'timestamp': new_record['timestamp'].strftime('%I:%M:%S %p'), 'date': date}, namespace='/teacher', broadcast=True)
-        return jsonify({'success': True, 'message': 'Attendance marked successfully!'})
-
-    except SignatureExpired: return jsonify({'success': False, 'error': 'QR Code has expired.'}), 400
-    except (BadTimeSignature, Exception): return jsonify({'success': False, 'error': 'Invalid QR Code.'}), 400
+    except SignatureExpired:
+        return jsonify({'success': False, 'message': 'QR Code has expired.'}), 400
+    except (BadTimeSignature, Exception):
+        return jsonify({'success': False, 'message': 'Invalid QR Code.'}), 400
 
 @app.route('/api/manual_mark', methods=['POST'])
 @login_required
@@ -429,6 +427,7 @@ if __name__ == '__main__':
 
     
     socketio.run(app, debug=True, host='127.0.0.1')
+
 
 
 
