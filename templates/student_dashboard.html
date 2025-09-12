@@ -223,7 +223,7 @@
                                     </tr>
                                 </thead>
                                 
-                                    <tbody id="attendance-record"></tbody>
+                                <tbody id="attendance-record"></tbody>
                             </table>
                         </div>
                     </div>
@@ -373,8 +373,10 @@
 
         const onScanSuccess = async (decodedText) => {
             html5QrCode.stop().then(async () => {
-                qrScanResult.textContent = `Scanned: ${decodedText}`;
-                qrScanResult.classList.add('success');
+                if (qrScanResult) {
+                    qrScanResult.textContent = `Scanned: ${decodedText}`;
+                    qrScanResult.classList.add('success');
+                }
 
                 // --- NEW: Send attendance mark to server ---
                 try {
@@ -389,7 +391,7 @@
                     if (data.success) {
                         const row = document.createElement("tr");
                         row.innerHTML = `
-                            <td>${data.date}</td>
+                            <td>${new Date().toLocaleDateString()}</td>
                             <td>${data.status}</td>
                             <td>${data.remarks || ''}</td>
                         `;
