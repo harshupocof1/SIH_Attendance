@@ -141,7 +141,7 @@ def student_stats():
     attended_classes = mongo.db.attendance.count_documents({"records.user_id": student_id})
     percentage = round((attended_classes / total_classes) * 100, 2) if total_classes > 0 else 0
 
-    today_date = datetime.utcnow().strftime('%Y-%d-%m')
+    today_date = datetime.utcnow().strftime('%Y-%m-%d')
     today_doc = mongo.db.attendance.find_one({"date": today_date})
     classes_today = 0
     if today_doc:
@@ -175,7 +175,7 @@ def teacher_qr():
 def teacher_monitor():
     if current_user.role != 'teacher':
         return "Access Denied", 403
-    date_str = request.args.get('date', datetime.utcnow().strftime('%Y-%d-%m'))
+    date_str = request.args.get('date', datetime.utcnow().strftime('%Y-%m-%d'))
     daily_attendance_doc = mongo.db.attendance.find_one({"date": date_str})
     return render_template('teacher_monitor.html', daily_doc=daily_attendance_doc, date_str=date_str)
 
@@ -184,7 +184,7 @@ def teacher_monitor():
 def teacher_manual_entry():
     if current_user.role != 'teacher':
         return "Access Denied", 403
-    today_date = datetime.utcnow().strftime('%Y-%d-%m')
+    today_date = datetime.utcnow().strftime('%Y-%m-%d')
     students = list(mongo.db.users.find({"role": "student"}))
     sections = sorted(list({s.get("section", "Unassigned") for s in students}))
     return render_template(
@@ -430,6 +430,7 @@ if __name__ == '__main__':
 
     
     socketio.run(app, debug=True, host='127.0.0.1')
+
 
 
 
